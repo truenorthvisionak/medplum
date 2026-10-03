@@ -16,6 +16,7 @@ import { getConfig } from '../config/loader';
 import { getProjectSystemRepo } from '../fhir/repo';
 import { getBinaryStorage } from '../storage/loader';
 import { MockConsole } from '../util/console';
+import { createPdf } from '../util/pdf';
 import { readStreamToString } from '../util/streams';
 import type { BotExecutionContext, BotExecutionResult } from './types';
 
@@ -81,6 +82,7 @@ export async function runInVmContext(request: BotExecutionContext): Promise<BotE
     ContentType,
     Hl7Message,
     MedplumClient,
+    createPdf,
     TextDecoder,
     TextEncoder,
     URL,
@@ -118,6 +120,7 @@ export async function runInVmContext(request: BotExecutionContext): Promise<BotE
     const medplum = new MedplumClient({
       baseUrl,
       defaultHeaders,
+      createPdf,
       fetch: function(url, options = {}) {
         options.headers ||= {};
         options.headers['X-Trace-Id'] = traceId;

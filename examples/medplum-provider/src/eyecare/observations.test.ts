@@ -4,7 +4,7 @@ import type { Bundle, Encounter, Observation, Patient, Practitioner } from '@med
 import { describe, expect, test } from 'vitest';
 import { EYE_EXAM_PANEL_CODE, IOP_CODE, VISUAL_ACUITY_CODE } from './codes';
 import type { EyeExamValues } from './observations';
-import { EMPTY_EYE_EXAM, buildEyeExamBundle, buildEyeExamObservations } from './observations';
+import { EMPTY_EYE_EXAM, buildEyeExamBundle, buildEyeExamObservations, valuesFromExam } from './observations';
 
 const patient: Patient = { resourceType: 'Patient', id: 'patient-1' };
 const performer: Practitioner = { resourceType: 'Practitioner', id: 'doc-1' };
@@ -110,6 +110,39 @@ describe('buildEyeExamObservations', () => {
     expect(anterior?.component?.find((c) => c.code.text === 'Iris')?.valueString).toBe('No NVI OU');
     const posterior = result.find((o) => o.code.text?.includes('Posterior'));
     expect(posterior?.component?.[0]).toMatchObject({ code: { text: 'C/D Ratio' }, valueString: '0.3 OU' });
+  });
+});
+
+describe('valuesFromExam', () => {
+  test('round-trips a full exam back into form values (minus notes)', () => {
+    const original = makeValues({
+      visualAcuity: { uncorrected: { OD: '20/40', OS: '20/30' }, corrected: { OD: '20/20', OS: '20/25' }, pinhole: {} },
+      refraction: { OD: { sphere: -2.25, cylinder: -0.75, axis: 90, add: 2 }, OS: { sphere: -1.5 } },
+      iop: { OD: 17, OS: 18, method: 'goldmann' },
+      anteriorSegment: { lidsLashes: 'Normal', iris: 'No NVI OU' },
+      posteriorSegment: { cdRatio: '0.3 OU' },
+      notes: 'visit-specific note',
+    });
+    const bundle = buildEyeExamBundle(ctx, original);
+    const resources = (bundle?.entry ?? []).map((e, i) => ({ ...(e.resource as Observation), id: `obs-${i}` }));
+    // Relink hasMember the way the search path keys members (Observation/<id>)
+    const byUrl = new Map<string, Observation>();
+    const panel = resources.find((o) => o.hasMember) as Observation;
+    const urls = (bundle?.entry ?? []).map((e) => e.fullUrl as string);
+    resources.forEach((obs, i) => byUrl.set(urls[i], obs));
+    const linkedPanel: Observation = {
+      ...panel,
+      hasMember: panel.hasMember?.map((m) => ({ reference: `Observation/${byUrl.get(m.reference as string)?.id}` })),
+    };
+    const lookup = new Map(resources.map((o) => [`Observation/${o.id}`, o] as const));
+
+    const restored = valuesFromExam(linkedPanel, lookup);
+    expect(restored.visualAcuity).toEqual(original.visualAcuity);
+    expect(restored.refraction).toEqual(original.refraction);
+    expect(restored.iop).toEqual(original.iop);
+    expect(restored.anteriorSegment).toEqual(original.anteriorSegment);
+    expect(restored.posteriorSegment).toEqual(original.posteriorSegment);
+    expect(restored.notes).toBeUndefined();
   });
 });
 

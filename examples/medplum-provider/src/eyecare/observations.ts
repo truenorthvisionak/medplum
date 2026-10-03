@@ -33,6 +33,9 @@ import {
   UCUM,
   VA_METHOD_SNELLEN,
   VISUAL_ACUITY_CODE,
+  codingEquals,
+  getLaterality,
+  observationMatches,
 } from './codes';
 
 // Numeric form fields hold `number | string` so typing an in-progress value
@@ -232,4 +235,75 @@ export function buildEyeExamBundle(ctx: BuildContext, values: EyeExamValues): Bu
   });
 
   return { resourceType: 'Bundle', type: 'transaction', entry: entries };
+}
+
+/**
+ * Inverse of buildEyeExamObservations: reconstructs form values from a stored
+ * exam (panel + members), used by "Copy forward last exam". Panel notes are
+ * intentionally not copied — they are visit-specific.
+ */
+export function valuesFromExam(panel: Observation, members: Map<string, Observation>): EyeExamValues {
+  const values = structuredClone(EMPTY_EYE_EXAM);
+  const resolved = (panel.hasMember ?? [])
+    .map((ref) => (ref.reference ? members.get(ref.reference) : undefined))
+    .filter((obs): obs is Observation => !!obs);
+
+  for (const obs of resolved) {
+    const eye = getLaterality(obs);
+
+    for (const correction of Object.keys(values.visualAcuity) as VaCorrection[]) {
+      if (observationMatches(obs, VISUAL_ACUITY_CODE[correction]) && (eye === 'OD' || eye === 'OS') && obs.valueString) {
+        values.visualAcuity[correction][eye] = obs.valueString;
+      }
+    }
+
+    if ((eye === 'OD' || eye === 'OS') && observationMatches(obs, REFRACTION_CODE[eye])) {
+      for (const [kind, concept] of Object.entries(REFRACTION_COMPONENT)) {
+        const comp = obs.component?.find((c) => c.code?.coding?.some((coding) => codingEquals(coding, concept.coding?.[0])));
+        if (comp?.valueQuantity?.value !== undefined) {
+          values.refraction[eye][kind as keyof RefractionEyeValues] = comp.valueQuantity.value;
+        }
+      }
+    }
+
+    if ((eye === 'OD' || eye === 'OS') && observationMatches(obs, IOP_CODE[eye]) && obs.valueQuantity?.value !== undefined) {
+      values.iop[eye] = obs.valueQuantity.value;
+      const methodCoding = obs.method?.coding?.[0];
+      if (methodCoding && !values.iop.method) {
+        values.iop.method = Object.entries(TONOMETRY_METHOD).find(([, concept]) =>
+          codingEquals(concept.coding?.[0], methodCoding)
+        )?.[0];
+      }
+    }
+
+    const codeText = obs.code?.text ?? '';
+    const segmentSpecs = [
+      { match: ANTERIOR_SEGMENT_CODE.text as string, key: 'anteriorSegment' as const, fields: ANTERIOR_SEGMENT_FIELDS },
+      { match: POSTERIOR_SEGMENT_CODE.text as string, key: 'posteriorSegment' as const, fields: POSTERIOR_SEGMENT_FIELDS },
+    ];
+    for (const spec of segmentSpecs) {
+      if (codeText === spec.match && obs.component?.length) {
+        for (const comp of obs.component) {
+          const field = spec.fields.find((f) => f.label === comp.code?.text);
+          if (field && comp.valueString) {
+            (values[spec.key] as Record<string, string>)[field.key] = comp.valueString;
+          }
+        }
+      }
+    }
+  }
+
+  return values;
+}
+
+/** True if the values contain any chartable exam content. */
+export function examHasValues(values: EyeExamValues): boolean {
+  const vaFilled = Object.values(values.visualAcuity).some((eyes) => eyes.OD || eyes.OS);
+  const refractionFilled = (['OD', 'OS'] as const).some((eye) =>
+    Object.values(values.refraction[eye]).some((v) => v !== undefined)
+  );
+  const iopFilled = values.iop.OD !== undefined || values.iop.OS !== undefined;
+  const segmentsFilled =
+    Object.values(values.anteriorSegment).some(Boolean) || Object.values(values.posteriorSegment).some(Boolean);
+  return vaFilled || refractionFilled || iopFilled || segmentsFilled;
 }

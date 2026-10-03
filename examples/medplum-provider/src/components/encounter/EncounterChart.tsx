@@ -17,8 +17,10 @@ import { TaskDetailsModal } from '../tasks/TaskDetailsModal';
 import { TaskPanel } from '../tasks/encounter/TaskPanel';
 import { BillingTab } from './BillingTab';
 import { EncounterHeader } from './EncounterHeader';
+import { VISIT_NOTE_BOT, executeClinicBot } from '../../eyecare/bots';
 import { AssessmentCard } from './AssessmentCard';
 import { EyeExamCard } from './EyeExamCard';
+import { VisitNoteCard } from './VisitNoteCard';
 import { SignAddendum } from './SignAddendum';
 
 const FHIR_ACT_REASON_SYSTEM = 'http://terminology.hl7.org/CodeSystem/v3-ActReason';
@@ -60,6 +62,7 @@ export const EncounterChart = (props: EncounterChartProps): JSX.Element => {
   const [chartNote, setChartNote] = useState(clinicalImpression?.note?.[0]?.text);
   const [provenances, setProvenances] = useState<Provenance[]>([]);
   const [chartNoteStatus, setChartNoteStatus] = useState(ChartNoteStatus.Unsigned);
+  const [noteRefreshKey, setNoteRefreshKey] = useState(0);
 
   useEffect(() => {
     if (!encounter) {
@@ -224,6 +227,14 @@ export const EncounterChart = (props: EncounterChartProps): JSX.Element => {
     } else {
       setChartNoteStatus(ChartNoteStatus.Signed);
     }
+
+    // Render the signed note into its immutable PDF (system-of-record artifact)
+    try {
+      await executeClinicBot(medplum, VISIT_NOTE_BOT, encounter);
+      setNoteRefreshKey((key) => key + 1);
+    } catch (err) {
+      showErrorNotification(err);
+    }
   };
 
   if (!patientResource || !encounter) {
@@ -260,7 +271,8 @@ export const EncounterChart = (props: EncounterChartProps): JSX.Element => {
                   />
                 </Card>
               )}
-              <EyeExamCard encounter={encounter} />
+              <VisitNoteCard encounter={encounter} refreshKey={noteRefreshKey} />
+              <EyeExamCard encounter={encounter} enabled={chartNoteStatus !== ChartNoteStatus.SignedAndLocked} />
               <AssessmentCard encounter={encounter} enabled={chartNoteStatus !== ChartNoteStatus.SignedAndLocked} />
               {tasks.map((task) => (
                 <TaskPanel

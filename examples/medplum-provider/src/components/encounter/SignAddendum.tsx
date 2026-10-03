@@ -7,6 +7,7 @@ import { useMedplum, useMedplumProfile } from '@medplum/react';
 import { IconLock, IconPencil, IconSignature } from '@tabler/icons-react';
 import type { JSX } from 'react';
 import { useEffect, useState } from 'react';
+import { VISIT_NOTE_BOT, executeClinicBot } from '../../eyecare/bots';
 import { ChartNoteStatus } from '../../types/encounter';
 import { showErrorNotification } from '../../utils/notifications';
 
@@ -129,6 +130,10 @@ export const SignAddendum = ({ provenances, chartNoteStatus, encounter }: SignAd
         },
       ]);
       setAddendumText('');
+
+      // Addenda are part of the record: regenerate the rendered note so the
+      // current PDF includes them (the prior version is superseded, not lost).
+      await executeClinicBot(medplum, VISIT_NOTE_BOT, encounter);
     } catch (error) {
       showErrorNotification(error);
     } finally {

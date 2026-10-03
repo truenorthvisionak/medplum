@@ -13,7 +13,8 @@ reason. This is the whole merge-conflict and audit surface of the fork.
 | `examples/medplum-provider/src/App.tsx` | +2 | Route for the Eye Exam tab (`/Patient/:id/eye-exam`) |
 | `examples/medplum-provider/src/pages/patient/PatientPage.utils.ts` | +5 | "Eye Exam" entry in the patient page tab list |
 | `examples/medplum-provider/src/components/encounter/EncounterChart.tsx` | +4 | Mounts `EyeExamCard` and `AssessmentCard` on the visit's Note & Tasks tab |
-| `packages/react/src/PatientSummary/ConditionDialog.tsx` | ±1 | Dx Date no longer required when adding a problem. ⚠️ Only edit inside a shared `@medplum/*` package — review on every upstream merge; consider upstreaming as an optional prop. |
+| `packages/react/src/PatientSummary/ConditionDialog.tsx` | ±1 | Dx Date no longer required when adding a problem. ⚠️ Edit inside a shared `@medplum/*` package — review on every upstream merge; consider upstreaming as an optional prop. |
+| `packages/server/src/bots/vmcontext.ts` | +3 | Wires the server's existing pdfmake util (`util/pdf.ts`) into the vmcontext bot sandbox so `medplum.createPdf()` works in self-hosted bots (visit notes, Rx, letters). ⚠️ Server-package edit — review on every merge; strong candidate to upstream (fills a documented gap for self-hosters). Note: server fonts are Helvetica-only, so bot docDefinitions must set `defaultStyle.font = 'Helvetica'`. |
 | `package.json` (+ lockfile) | +1 | Adds `clinic/bots` to the npm workspaces |
 | `.dockerignore` | +1 | Excludes nested `node_modules` from Docker build context |
 

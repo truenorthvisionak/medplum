@@ -68,7 +68,7 @@ Then:
    Project.features = ["bots"]):
 
    ```bash
-   EMAIL=you@example.com PASSWORD=... node clinic/seed/deploy-worklist-bot.mjs
+   EMAIL=you@example.com PASSWORD=... node clinic/seed/deploy-bots.mjs
    ```
 
    Booking/updating an Appointment then writes a worklist entry that devices
@@ -84,7 +84,22 @@ Then:
    ```
 
 7. Sign in to the provider app at http://localhost:3001 with the same account.
-8. Open a patient → **Eye Exam** tab.
+8. Open a patient → **Eye Exam** tab, or chart directly on a visit.
+
+## Documentation workflow (system of record)
+
+- A visit is charted on one screen (Note & Tasks): questionnaire tasks, the
+  inline **Eye Exam** form (with *Copy forward last exam* and exam templates),
+  and the problem-list-driven **Assessment** section.
+- **Sign & Lock** renders the whole visit into an immutable **PDF note**
+  (`generate-visit-note` bot) stored as a DocumentReference; addenda
+  regenerate the note, superseding (never deleting) the prior version. The
+  patient's **Notes** tab lists every visit note chronologically.
+- **Spectacle Rx** (from the latest refraction) and a draft **PCP letter**
+  (from the visit's findings/assessment/plan) are one click on the visit page;
+  both land on the Documents tab as PDFs.
+- Bot PDFs require the vmcontext `createPdf` wiring (see UPSTREAM-CHANGES.md)
+  and must use the Helvetica font family.
 
 The first server boot runs database migrations and seeds base FHIR resources;
 it can take a couple of minutes before the healthcheck goes green. Watch with
