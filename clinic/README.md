@@ -122,19 +122,22 @@ npm test
 
 The production box only needs Docker + this repo.
 
-1. Commit your changes on your fork (create one under your GitHub account and
-   set it as `origin`; keep `upstream` pointing at `medplum/medplum` for updates):
+1. Commit your changes to the fork. This is already configured: `origin` =
+   `truenorthvisionak/medplum` (public fork — never commit PHI or real
+   credentials), `upstream` = `medplum/medplum`, and all clinic work lives on
+   the **`clinic`** branch (the fork's `main` stays tracking upstream):
 
    ```bash
-   git remote rename origin upstream
-   git remote add origin git@github.com:YOUR_ORG/medplum.git
-   git push -u origin main
+   git add -A
+   git commit
+   git push
    ```
 
 2. On the clinic server:
 
    ```bash
-   git pull
+   git clone -b clinic https://github.com/truenorthvisionak/medplum.git  # first time
+   git pull                  # thereafter
    cd clinic
    docker compose build
    docker compose up -d      # rolling restart of changed services
@@ -169,7 +172,7 @@ The production box only needs Docker + this repo.
 
 ```bash
 git fetch upstream
-git merge upstream/main     # resolve conflicts, mostly none — customizations live in
+git merge upstream/main     # on the clinic branch; resolve conflicts, mostly none — customizations live in
                             # clinic/ and examples/medplum-provider/src/eyecare
 cd clinic && docker compose build && docker compose up -d
 ```
