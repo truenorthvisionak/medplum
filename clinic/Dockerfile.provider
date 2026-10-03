@@ -1,0 +1,23 @@
+# syntax=docker/dockerfile:1
+# Builds the medplum-provider app (examples/medplum-provider) from source.
+# The API base URL is baked in at build time via the MEDPLUM_BASE_URL build arg.
+#
+# Build from the repo root:
+#   docker build -f clinic/Dockerfile.provider \
+#     --build-arg MEDPLUM_BASE_URL=http://localhost:8103/ \
+#     -t clinic/medplum-provider .
+
+FROM node:24-slim AS builder
+ARG MEDPLUM_BASE_URL=http://localhost:8103/
+ENV TURBO_TELEMETRY_DISABLED=1
+WORKDIR /usr/src/medplum
+COPY . .
+RUN --mount=type=cache,target=/root/.npm npm ci
+RUN printf 'MEDPLUM_BASE_URL=%s\n' "$MEDPLUM_BASE_URL" > examples/medplum-provider/.env
+RUN npx turbo run build --filter=medplum-provider
+
+FROM nginxinc/nginx-unprivileged:alpine
+COPY clinic/nginx-provider.conf /etc/nginx/conf.d/default.conf
+COPY --from=builder /usr/src/medplum/examples/medplum-provider/dist /usr/share/nginx/html
+
+EXPOSE 3000

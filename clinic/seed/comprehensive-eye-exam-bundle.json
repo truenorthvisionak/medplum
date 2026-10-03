@@ -1,0 +1,370 @@
+{
+  "resourceType": "Bundle",
+  "type": "transaction",
+  "entry": [
+    {
+      "fullUrl": "urn:uuid:5f1c9b0e-2a4d-4e8f-9c3b-7d6a8e5f4c21",
+      "resource": {
+        "resourceType": "Questionnaire",
+        "url": "urn:clinic:questionnaire:eye-exam-history",
+        "status": "active",
+        "name": "Eye Exam History",
+        "title": "History & Chief Complaint",
+        "code": [
+          {
+            "system": "http://snomed.info/sct",
+            "code": "422979000",
+            "display": "History taking"
+          }
+        ],
+        "item": [
+          {
+            "linkId": "cc",
+            "type": "text",
+            "required": true,
+            "text": "Chief complaint"
+          },
+          {
+            "linkId": "hpi",
+            "type": "text",
+            "text": "History of present illness (onset, duration, laterality, associated symptoms)"
+          },
+          {
+            "linkId": "ocular-history",
+            "type": "text",
+            "text": "Ocular history (surgeries, trauma, amblyopia, family history of glaucoma/AMD)"
+          },
+          {
+            "linkId": "correction-wear",
+            "type": "choice",
+            "text": "Current correction",
+            "answerOption": [
+              { "valueString": "None" },
+              { "valueString": "Glasses" },
+              { "valueString": "Contact lenses" },
+              { "valueString": "Glasses and contact lenses" }
+            ]
+          },
+          {
+            "linkId": "last-exam",
+            "type": "date",
+            "text": "Date of last eye exam (approximate)"
+          }
+        ]
+      },
+      "request": { "method": "POST", "url": "Questionnaire" }
+    },
+    {
+      "fullUrl": "urn:uuid:6a2d8c1f-3b5e-4f90-8d4c-8e7b9f6a5d32",
+      "resource": {
+        "resourceType": "Questionnaire",
+        "url": "urn:clinic:questionnaire:eye-exam-pretest-entrance",
+        "status": "active",
+        "name": "Eye Exam Entrance Testing",
+        "title": "Entrance Testing & Dilation",
+        "code": [
+          {
+            "system": "http://snomed.info/sct",
+            "code": "36228007",
+            "display": "Ophthalmic examination and evaluation"
+          }
+        ],
+        "item": [
+          {
+            "linkId": "note-structured",
+            "type": "display",
+            "text": "Record visual acuity, refraction, and IOP in the patient's Eye Exam tab — those are stored as structured, coded observations. This form covers the remaining entrance tests."
+          },
+          {
+            "linkId": "pupils",
+            "type": "choice",
+            "text": "Pupils",
+            "answerOption": [
+              { "valueString": "PERRLA, no APD" },
+              { "valueString": "Abnormal (describe below)" }
+            ]
+          },
+          {
+            "linkId": "pupils-notes",
+            "type": "text",
+            "text": "Pupil findings (if abnormal)"
+          },
+          {
+            "linkId": "eoms",
+            "type": "choice",
+            "text": "Extraocular motilities",
+            "answerOption": [
+              { "valueString": "Full and smooth OU" },
+              { "valueString": "Restricted (describe below)" }
+            ]
+          },
+          {
+            "linkId": "eoms-notes",
+            "type": "text",
+            "text": "EOM findings (if restricted)"
+          },
+          {
+            "linkId": "cvf",
+            "type": "choice",
+            "text": "Confrontation visual fields",
+            "answerOption": [
+              { "valueString": "Full to finger counting OD and OS" },
+              { "valueString": "Constricted / defect (describe below)" }
+            ]
+          },
+          {
+            "linkId": "cvf-notes",
+            "type": "text",
+            "text": "Confrontation field findings (if abnormal)"
+          },
+          {
+            "linkId": "pachymetry-od",
+            "type": "integer",
+            "text": "Pachymetry OD (µm)"
+          },
+          {
+            "linkId": "pachymetry-os",
+            "type": "integer",
+            "text": "Pachymetry OS (µm)"
+          },
+          {
+            "linkId": "dilated",
+            "type": "boolean",
+            "text": "Patient dilated this visit"
+          },
+          {
+            "linkId": "dilation-agent",
+            "type": "choice",
+            "text": "Dilation agent",
+            "answerOption": [
+              { "valueString": "Tropicamide 1%" },
+              { "valueString": "Tropicamide 1% + Phenylephrine 2.5%" },
+              { "valueString": "Cyclopentolate 1%" },
+              { "valueString": "Other (note in comments)" }
+            ]
+          },
+          {
+            "linkId": "dilation-time",
+            "type": "string",
+            "text": "Time drops instilled"
+          }
+        ]
+      },
+      "request": { "method": "POST", "url": "Questionnaire" }
+    },
+    {
+      "fullUrl": "urn:uuid:7b3e9d20-4c6f-4a01-9e5d-9f8c0a7b6e43",
+      "resource": {
+        "resourceType": "Questionnaire",
+        "url": "urn:clinic:questionnaire:eye-exam-assessment-plan",
+        "status": "active",
+        "name": "Eye Exam Assessment and Plan",
+        "title": "Assessment & Plan",
+        "code": [
+          {
+            "system": "http://snomed.info/sct",
+            "code": "386053000",
+            "display": "Evaluation procedure"
+          }
+        ],
+        "item": [
+          {
+            "linkId": "assessment-note",
+            "type": "display",
+            "text": "Per-problem assessment is documented in the visit's Assessment section, driven by the problem list."
+          },
+          {
+            "linkId": "plan",
+            "type": "text",
+            "required": true,
+            "text": "Plan (treatment, prescriptions, referrals, testing ordered)"
+          },
+          {
+            "linkId": "rx-finalized",
+            "type": "boolean",
+            "text": "Spectacle Rx finalized and released"
+          },
+          {
+            "linkId": "counseling",
+            "type": "text",
+            "text": "Patient education / counseling provided"
+          },
+          {
+            "linkId": "rtc",
+            "type": "choice",
+            "text": "Return to clinic",
+            "answerOption": [
+              { "valueString": "1 week" },
+              { "valueString": "1 month" },
+              { "valueString": "3 months" },
+              { "valueString": "6 months" },
+              { "valueString": "1 year" },
+              { "valueString": "PRN" }
+            ]
+          }
+        ]
+      },
+      "request": { "method": "POST", "url": "Questionnaire" }
+    },
+    {
+      "fullUrl": "urn:uuid:8c4f0e31-5d70-4b12-8f6e-0a9d1b8c7f54",
+      "resource": {
+        "resourceType": "ChargeItemDefinition",
+        "url": "urn:clinic:chargeitemdefinition:comprehensive-eye-exam",
+        "title": "Comprehensive Eye Exam",
+        "status": "active",
+        "propertyGroup": [
+          {
+            "priceComponent": [
+              {
+                "type": "base",
+                "code": {
+                  "coding": [
+                    {
+                      "system": "http://www.ama-assn.org/go/cpt",
+                      "code": "92014",
+                      "display": "Ophthalmological services, comprehensive, established patient"
+                    }
+                  ]
+                },
+                "factor": 1,
+                "amount": { "value": 150, "currency": "USD" }
+              }
+            ]
+          },
+          {
+            "applicability": [
+              {
+                "description": "Refraction (92015)",
+                "expression": "%resource.code.coding.where(system='http://www.ama-assn.org/go/cpt' and code='92015').exists()"
+              }
+            ],
+            "priceComponent": [
+              {
+                "type": "surcharge",
+                "code": {
+                  "coding": [
+                    {
+                      "system": "http://www.ama-assn.org/go/cpt",
+                      "code": "92015",
+                      "display": "Determination of refractive state"
+                    }
+                  ]
+                },
+                "factor": 1,
+                "amount": { "value": 45, "currency": "USD" }
+              }
+            ]
+          }
+        ]
+      },
+      "request": { "method": "POST", "url": "ChargeItemDefinition" }
+    },
+    {
+      "fullUrl": "urn:uuid:9d501f42-6e81-4c23-9a7f-1b0e2c9d8a65",
+      "resource": {
+        "resourceType": "ActivityDefinition",
+        "url": "urn:clinic:activitydefinition:comprehensive-eye-exam-visit",
+        "name": "Comprehensive Eye Exam Visit",
+        "status": "active",
+        "kind": "ServiceRequest",
+        "intent": "order",
+        "extension": [
+          {
+            "url": "http://medplum.com/fhir/StructureDefinition/applicable-charge-definition",
+            "valueCanonical": "urn:clinic:chargeitemdefinition:comprehensive-eye-exam"
+          }
+        ],
+        "code": {
+          "coding": [
+            {
+              "system": "http://www.ama-assn.org/go/cpt",
+              "code": "92014",
+              "display": "Ophthalmological services, comprehensive, established patient"
+            },
+            {
+              "system": "http://snomed.info/sct",
+              "code": "36228007",
+              "display": "Ophthalmic examination and evaluation"
+            }
+          ]
+        }
+      },
+      "request": { "method": "POST", "url": "ActivityDefinition" }
+    },
+    {
+      "fullUrl": "urn:uuid:0e612053-7f92-4d34-8b80-2c1f3d0e9b76",
+      "resource": {
+        "resourceType": "ActivityDefinition",
+        "url": "urn:clinic:activitydefinition:refraction-service",
+        "name": "Refraction",
+        "status": "active",
+        "kind": "ServiceRequest",
+        "intent": "order",
+        "extension": [
+          {
+            "url": "http://medplum.com/fhir/StructureDefinition/applicable-charge-definition",
+            "valueCanonical": "urn:clinic:chargeitemdefinition:comprehensive-eye-exam"
+          }
+        ],
+        "code": {
+          "coding": [
+            {
+              "system": "http://www.ama-assn.org/go/cpt",
+              "code": "92015",
+              "display": "Determination of refractive state"
+            }
+          ]
+        }
+      },
+      "request": { "method": "POST", "url": "ActivityDefinition" }
+    },
+    {
+      "fullUrl": "urn:uuid:1f723164-80a3-4e45-9c91-3d204e1f0c87",
+      "resource": {
+        "resourceType": "PlanDefinition",
+        "name": "Comprehensive Eye Exam",
+        "title": "Comprehensive Eye Exam",
+        "status": "active",
+        "type": {
+          "coding": [
+            {
+              "system": "http://terminology.hl7.org/CodeSystem/plan-definition-type",
+              "code": "order-set",
+              "display": "Order Set"
+            }
+          ]
+        },
+        "action": [
+          {
+            "id": "history",
+            "title": "History & Chief Complaint",
+            "definitionCanonical": "urn:clinic:questionnaire:eye-exam-history"
+          },
+          {
+            "id": "entrance-testing",
+            "title": "Entrance Testing & Dilation",
+            "description": "VA, refraction, and IOP are charted in the patient's Eye Exam tab.",
+            "definitionCanonical": "urn:clinic:questionnaire:eye-exam-pretest-entrance"
+          },
+          {
+            "id": "assessment-plan",
+            "title": "Assessment & Plan",
+            "definitionCanonical": "urn:clinic:questionnaire:eye-exam-assessment-plan"
+          },
+          {
+            "id": "charge-visit",
+            "title": "Comprehensive Eye Exam Visit",
+            "definitionCanonical": "urn:clinic:activitydefinition:comprehensive-eye-exam-visit"
+          },
+          {
+            "id": "charge-refraction",
+            "title": "Refraction",
+            "definitionCanonical": "urn:clinic:activitydefinition:refraction-service"
+          }
+        ]
+      },
+      "request": { "method": "POST", "url": "PlanDefinition" }
+    }
+  ]
+}

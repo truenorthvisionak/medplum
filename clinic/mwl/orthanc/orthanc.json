@@ -1,0 +1,25 @@
+{
+  // Clinic DICOM archive + Modality Worklist SCP.
+  // Merged with the image defaults by /startup/generateConfiguration.py.
+  "Name": "CLINIC-ORTHANC",
+
+  "DicomAet": "ORTHANC",
+  "DicomPort": 4242,
+  "DicomCheckCalledAet": false,
+
+  // LAN-only deployment: allow C-FIND/C-STORE from any calling AET so devices
+  // work out of the box. Before production, register each device's AE title in
+  // "DicomModalities" and flip these to false (see clinic/SECURITY.md).
+  "DicomAlwaysAllowFind": true,
+  "DicomAlwaysAllowFindWorklist": true,
+  "DicomAlwaysAllowEcho": true,
+  "DicomAlwaysAllowStore": true,
+
+  "RemoteAccessAllowed": true,
+  "AuthenticationEnabled": false,
+
+  "Worklists": {
+    "Enable": true,
+    "Database": "/var/lib/orthanc/worklists"
+  }
+}

@@ -1,0 +1,227 @@
+# Clinic deployment stack — Medplum EHR built from this repo's source,
+# plus the Open Integration Engine (Mirth fork) for instrument/EMR messaging.
+#
+# Usage (from the clinic/ directory):
+#   docker compose build          # compile server + provider app from source
+#   docker compose up -d          # start everything
+#
+# Services:
+#   postgres        - Medplum database
+#   redis           - Medplum cache / queues
+#   medplum-server  - FHIR API server (built from ../packages/server source)
+#   medplum-app     - Medplum admin console (official image, runtime-configured)
+#   provider        - Provider EHR UI (built from ../examples/medplum-provider source)
+#   oie-db          - Database for the integration engine
+#   oie             - Open Integration Engine (open-source Mirth Connect fork)
+
+name: medplum-clinic
+
+services:
+  postgres:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      - POSTGRES_USER=medplum
+      - POSTGRES_PASSWORD=${MEDPLUM_DB_PASSWORD:-medplum}
+    volumes:
+      - medplum-postgres-data:/var/lib/postgresql/data
+    command:
+      - 'postgres'
+      - '-c'
+      - 'listen_addresses=*'
+      - '-c'
+      - 'statement_timeout=60000'
+      - '-c'
+      - 'default_transaction_isolation=REPEATABLE READ'
+      - '-c'
+      - 'shared_preload_libraries=pg_stat_statements,auto_explain'
+    ports:
+      - '127.0.0.1:5432:5432'
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U medplum']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7
+    restart: unless-stopped
+    command: redis-server --requirepass ${MEDPLUM_REDIS_PASSWORD:-medplum}
+    ports:
+      - '127.0.0.1:6379:6379'
+    healthcheck:
+      test: ['CMD', 'redis-cli', '-a', '${MEDPLUM_REDIS_PASSWORD:-medplum}', 'ping']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  medplum-server:
+    build:
+      context: ..
+      dockerfile: clinic/Dockerfile.server
+    image: clinic/medplum-server:latest
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    ports:
+      - '8103:8103'
+    # 'env' tells the server to read its config from environment variables
+    command: ['env']
+    volumes:
+      - medplum-binary-data:/usr/src/medplum/binary
+    environment:
+      MEDPLUM_PORT: 8103
+      MEDPLUM_BASE_URL: ${MEDPLUM_BASE_URL:-http://localhost:8103/}
+      MEDPLUM_APP_BASE_URL: ${MEDPLUM_APP_BASE_URL:-http://localhost:3000/}
+      MEDPLUM_STORAGE_BASE_URL: ${MEDPLUM_STORAGE_BASE_URL:-http://localhost:8103/storage/}
+
+      MEDPLUM_DATABASE_HOST: 'postgres'
+      MEDPLUM_DATABASE_PORT: 5432
+      MEDPLUM_DATABASE_DBNAME: 'medplum'
+      MEDPLUM_DATABASE_USERNAME: 'medplum'
+      MEDPLUM_DATABASE_PASSWORD: ${MEDPLUM_DB_PASSWORD:-medplum}
+
+      MEDPLUM_REDIS_HOST: 'redis'
+      MEDPLUM_REDIS_PORT: 6379
+      MEDPLUM_REDIS_PASSWORD: ${MEDPLUM_REDIS_PASSWORD:-medplum}
+
+      MEDPLUM_BINARY_STORAGE: 'file:./binary/'
+      MEDPLUM_SUPPORT_EMAIL: '"Medplum" <support@example.com>'
+      # No reCAPTCHA keys: with an empty secret the server skips the check,
+      # which is appropriate for a LAN-internal deployment. Lock down
+      # registration in production instead (see clinic/README.md).
+      MEDPLUM_MAX_JSON_SIZE: '1mb'
+      MEDPLUM_MAX_BATCH_SIZE: '50mb'
+      MEDPLUM_VM_CONTEXT_BOTS_ENABLED: 'true'
+      MEDPLUM_DEFAULT_BOT_RUNTIME_VERSION: 'vmcontext'
+      MEDPLUM_ALLOWED_ORIGINS: '*'
+      MEDPLUM_INTROSPECTION_ENABLED: 'true'
+      MEDPLUM_SHUTDOWN_TIMEOUT_MILLISECONDS: 30000
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          'fetch("http://localhost:8103/healthcheck").then(r => r.json()).then(console.log).catch(() => { process.exit(1); })',
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # Medplum admin console (project admin, super admin, resource browser).
+  # Uses the official image; the base URL is substituted at container start.
+  medplum-app:
+    image: medplum/medplum-app:latest
+    restart: unless-stopped
+    depends_on:
+      medplum-server:
+        condition: service_healthy
+    ports:
+      - '3000:3000'
+    environment:
+      MEDPLUM_BASE_URL: ${MEDPLUM_BASE_URL:-http://localhost:8103/}
+      RECAPTCHA_SITE_KEY: ''
+
+  # Provider EHR UI — built from ../examples/medplum-provider (contains the
+  # clinic customizations, including the eye exam feature).
+  provider:
+    build:
+      context: ..
+      dockerfile: clinic/Dockerfile.provider
+      args:
+        MEDPLUM_BASE_URL: ${MEDPLUM_BASE_URL:-http://localhost:8103/}
+    image: clinic/medplum-provider:latest
+    restart: unless-stopped
+    depends_on:
+      medplum-server:
+        condition: service_healthy
+    ports:
+      - '3001:3000'
+
+  oie-db:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      - POSTGRES_USER=oie
+      - POSTGRES_PASSWORD=${OIE_DB_PASSWORD:-oie}
+      - POSTGRES_DB=oie
+    volumes:
+      - oie-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U oie']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Open Integration Engine — open-source fork of Mirth Connect
+  # (https://github.com/OpenIntegrationEngine/engine, Docker Hub: openintegrationengine/engine).
+  # Pinned to 4.5.2, the current GA image; watch for 4.6.0 images upstream.
+  # Admin UI: https://localhost:8444  (Administrator Launcher)
+  # MLLP listener ports 6671-6680 are reserved for HL7v2 channels
+  # (instruments, FORUM, etc.) — open more as channels are added.
+  oie:
+    image: ${OIE_IMAGE:-openintegrationengine/engine:4.5.2-alpine-jre}
+    restart: unless-stopped
+    depends_on:
+      oie-db:
+        condition: service_healthy
+    environment:
+      DATABASE: postgres
+      DATABASE_URL: jdbc:postgresql://oie-db:5432/oie
+      DATABASE_MAX_CONNECTIONS: 20
+      DATABASE_USERNAME: oie
+      DATABASE_PASSWORD: ${OIE_DB_PASSWORD:-oie}
+    ports:
+      # Host ports avoid the legacy OpenEMR/Mirth stack (which holds 6661 and 8443)
+      - '8081:8080' # http admin
+      - '8444:8443' # https admin / launcher
+      - '6671-6680:6671-6680' # MLLP channel listeners
+    volumes:
+      - oie-appdata:/opt/connect/appdata
+
+  # DICOM archive + Modality Worklist SCP for the Topcon fleet / IOLMaster
+  # (see clinic/INTEGRATION.md). Host ports avoid the legacy OpenEMR stack's
+  # Orthanc (4242/8042).
+  orthanc:
+    image: orthancteam/orthanc:latest
+    restart: unless-stopped
+    environment:
+      WORKLISTS_PLUGIN_ENABLED: 'true'
+      VERBOSE_ENABLED: 'true'
+      TZ: ${CLINIC_TZ:-America/Anchorage}
+    ports:
+      - '4243:4242' # DICOM (C-FIND MWL / C-STORE / C-ECHO)
+      - '8043:8042' # web UI / REST / DICOMweb
+    volumes:
+      - ./mwl/orthanc/orthanc.json:/etc/orthanc/worklists.json:ro
+      - orthanc-db:/var/lib/orthanc/db
+      - orthanc-worklists:/var/lib/orthanc/worklists
+
+  # Turns a JSON order into a .wl file for Orthanc to serve. Fed by the
+  # Medplum appointment-to-worklist bot over the compose network.
+  # TZ must match the devices' clocks, or "today" disagrees and the
+  # worklist silently comes back empty.
+  wl-writer:
+    build: ./mwl/wl-writer
+    restart: unless-stopped
+    environment:
+      WORKLIST_DIR: /worklists
+      DEFAULT_MODALITY: 'OPT'
+      DEFAULT_STATION_AET: 'CLINIC'
+      TZ: ${CLINIC_TZ:-America/Anchorage}
+    ports:
+      - '127.0.0.1:8501:8500' # host access for debugging only
+    volumes:
+      - orthanc-worklists:/worklists
+
+volumes:
+  medplum-postgres-data:
+  medplum-binary-data:
+  oie-postgres-data:
+  oie-appdata:
+  orthanc-db:
+  orthanc-worklists:

@@ -76,7 +76,7 @@ export function ConditionDialog(props: ConditionDialogProps): JSX.Element {
           onChange={(clinicalStatus) => setClinicalStatus(clinicalStatus)}
           outcome={undefined}
         />
-        <DateTimeInput name="onsetDateTime" label="Dx Date" defaultValue={condition?.onsetDateTime} required />
+        <DateTimeInput name="onsetDateTime" label="Dx Date" defaultValue={condition?.onsetDateTime} />
         <Group justify="flex-end" gap={4} mt="md">
           <SubmitButton>Save</SubmitButton>
         </Group>

@@ -42,6 +42,7 @@ import { CoveragePage } from './pages/patient/CoveragePage';
 import { DocumentsPage } from './pages/patient/DocumentsPage';
 import { DoseSpotTab } from './pages/patient/DoseSpotTab';
 import { EditTab } from './pages/patient/EditTab';
+import { EyeExamPage } from './pages/patient/EyeExamPage';
 import { ExportTab } from './pages/patient/ExportTab';
 import { IntakeFormPage } from './pages/patient/IntakeFormPage';
 import { LabsPage } from './pages/patient/LabsPage';
@@ -251,6 +252,7 @@ export function App(): JSX.Element | null {
                 <Route path="Encounter" element={<EncountersPage />} />
                 <Route path="Encounter/:encounterId/Task?/:taskId?" element={<EncountersPage />} />
                 <Route path="edit" element={<EditTab />} />
+                <Route path="eye-exam" element={<EyeExamPage />} />
                 <Route path="Communication" element={<CommunicationTab />} />
                 <Route path="Communication/:messageId" element={<CommunicationTab />} />
                 <Route path="Task" element={<TasksTab />} />

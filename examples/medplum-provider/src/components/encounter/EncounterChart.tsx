@@ -17,6 +17,8 @@ import { TaskDetailsModal } from '../tasks/TaskDetailsModal';
 import { TaskPanel } from '../tasks/encounter/TaskPanel';
 import { BillingTab } from './BillingTab';
 import { EncounterHeader } from './EncounterHeader';
+import { AssessmentCard } from './AssessmentCard';
+import { EyeExamCard } from './EyeExamCard';
 import { SignAddendum } from './SignAddendum';
 
 const FHIR_ACT_REASON_SYSTEM = 'http://terminology.hl7.org/CodeSystem/v3-ActReason';
@@ -258,6 +260,8 @@ export const EncounterChart = (props: EncounterChartProps): JSX.Element => {
                   />
                 </Card>
               )}
+              <EyeExamCard encounter={encounter} />
+              <AssessmentCard encounter={encounter} enabled={chartNoteStatus !== ChartNoteStatus.SignedAndLocked} />
               {tasks.map((task) => (
                 <TaskPanel
                   key={task.id}

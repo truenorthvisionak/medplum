@@ -1,0 +1,355 @@
+{
+ "resourceType": "ValueSet",
+ "url": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1186.8",
+ "version": "clinic-curated-1",
+ "name": "ClinicAllergySubstances",
+ "title": "Common allergens for allergy and intolerance documentation (clinic-curated)",
+ "status": "active",
+ "description": "Curated subset standing in for the VSAC 'Common substances for allergy and intolerance documentation' value set, which requires a UMLS license to download. Same canonical URL so the provider app's allergy picker resolves it. Every coding verified against tx.fhir.org. Extend the expansion.contains list as needed and re-run the seed after deleting the old ValueSet, or replace wholesale with the licensed VSAC expansion.",
+ "expansion": {
+  "timestamp": "2026-08-29T00:00:00Z",
+  "total": 68,
+  "contains": [
+   {
+    "system": "http://snomed.info/sct",
+    "code": "414285001",
+    "display": "Allergy to food"
+   },
+   {
+    "system": "http://snomed.info/sct",
+    "code": "264287008",
+    "display": "Animal dander"
+   },
+   {
+    "system": "http://snomed.info/sct",
+    "code": "288328004",
+    "display": "Bee venom"
+   },
+   {
+    "system": "http://snomed.info/sct",
+    "code": "227493005",
+    "display": "Cashew nut"
+   },
+   {
+    "system": "http://snomed.info/sct",
+    "code": "385420005",
+    "display": "Contrast media"
+   },
+   {
+    "system": "http://snomed.info/sct",
+    "code": "226760005",
+    "display": "Dairy food"
+   },
+   {
+    "system": "http://snomed.info/sct",
+    "code": "102263004",
+    "display": "Eggs (edible)"
+   },
+   {
+    "system": "http://snomed.info/sct",
+    "code": "227037002",
+    "display": "Fish - dietary"
+   },
+   {
+    "system": "http://snomed.info/sct",
+    "code": "89811004",
+    "display": "Gluten"
+   },
+   {
+    "system": "http://snomed.info/sct",
+    "code": "256277009",
+    "display": "Grass pollen"
+   },
+   {
+    "system": "http://snomed.info/sct",
+    "code": "260147004",
+    "display": "House dust mite"
+   },
+   {
+    "system": "http://snomed.info/sct",
+    "code": "44588005",
+    "display": "Iodine"
+   },
+   {
+    "system": "http://snomed.info/sct",
+    "code": "111088007",
+    "display": "Latex"
+   },
+   {
+    "system": "http://snomed.info/sct",
+    "code": "84489001",
+    "display": "Mold"
+   },
+   {
+    "system": "http://snomed.info/sct",
+    "code": "716186003",
+    "display": "No known allergy"
+   },
+   {
+    "system": "http://snomed.info/sct",
+    "code": "409137002",
+    "display": "No known drug allergy"
+   },
+   {
+    "system": "http://snomed.info/sct",
+    "code": "428607008",
+    "display": "No known environmental allergy"
+   },
+   {
+    "system": "http://snomed.info/sct",
+    "code": "429625007",
+    "display": "No known food allergy"
+   },
+   {
+    "system": "http://snomed.info/sct",
+    "code": "256349002",
+    "display": "Peanut - dietary"
+   },
+   {
+    "system": "http://snomed.info/sct",
+    "code": "373270004",
+    "display": "Penicillin antibacterial"
+   },
+   {
+    "system": "http://snomed.info/sct",
+    "code": "735029006",
+    "display": "Shellfish"
+   },
+   {
+    "system": "http://snomed.info/sct",
+    "code": "387406002",
+    "display": "Sulfonamide"
+   },
+   {
+    "system": "http://snomed.info/sct",
+    "code": "442571000124108",
+    "display": "Tree nut"
+   },
+   {
+    "system": "http://snomed.info/sct",
+    "code": "782576004",
+    "display": "Tree pollen"
+   },
+   {
+    "system": "http://snomed.info/sct",
+    "code": "419604006",
+    "display": "Weed pollen"
+   },
+   {
+    "system": "http://snomed.info/sct",
+    "code": "412071004",
+    "display": "Wheat"
+   },
+   {
+    "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+    "code": "161",
+    "display": "acetaminophen"
+   },
+   {
+    "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+    "code": "723",
+    "display": "amoxicillin"
+   },
+   {
+    "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+    "code": "1191",
+    "display": "aspirin"
+   },
+   {
+    "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+    "code": "1223",
+    "display": "atropine"
+   },
+   {
+    "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+    "code": "18631",
+    "display": "azithromycin"
+   },
+   {
+    "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+    "code": "1379",
+    "display": "benzalkonium chloride"
+   },
+   {
+    "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+    "code": "134615",
+    "display": "brimonidine"
+   },
+   {
+    "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+    "code": "2231",
+    "display": "cephalexin"
+   },
+   {
+    "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+    "code": "2551",
+    "display": "ciprofloxacin"
+   },
+   {
+    "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+    "code": "2670",
+    "display": "codeine"
+   },
+   {
+    "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+    "code": "3001",
+    "display": "cyclopentolate"
+   },
+   {
+    "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+    "code": "60207",
+    "display": "dorzolamide"
+   },
+   {
+    "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+    "code": "3640",
+    "display": "doxycycline"
+   },
+   {
+    "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+    "code": "4053",
+    "display": "erythromycin"
+   },
+   {
+    "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+    "code": "4337",
+    "display": "fentanyl"
+   },
+   {
+    "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+    "code": "25138",
+    "display": "fluorescein"
+   },
+   {
+    "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+    "code": "1596450",
+    "display": "gentamicin"
+   },
+   {
+    "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+    "code": "5489",
+    "display": "hydrocodone"
+   },
+   {
+    "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+    "code": "5640",
+    "display": "ibuprofen"
+   },
+   {
+    "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+    "code": "43611",
+    "display": "latanoprost"
+   },
+   {
+    "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+    "code": "82122",
+    "display": "levofloxacin"
+   },
+   {
+    "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+    "code": "6387",
+    "display": "lidocaine"
+   },
+   {
+    "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+    "code": "7052",
+    "display": "morphine"
+   },
+   {
+    "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+    "code": "139462",
+    "display": "moxifloxacin"
+   },
+   {
+    "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+    "code": "7258",
+    "display": "naproxen"
+   },
+   {
+    "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+    "code": "7299",
+    "display": "neomycin"
+   },
+   {
+    "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+    "code": "7804",
+    "display": "oxycodone"
+   },
+   {
+    "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+    "code": "7980",
+    "display": "penicillin G"
+   },
+   {
+    "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+    "code": "7984",
+    "display": "penicillin V"
+   },
+   {
+    "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+    "code": "8163",
+    "display": "phenylephrine"
+   },
+   {
+    "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+    "code": "8328",
+    "display": "pilocarpine"
+   },
+   {
+    "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+    "code": "8611",
+    "display": "povidone-iodine"
+   },
+   {
+    "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+    "code": "8638",
+    "display": "prednisolone"
+   },
+   {
+    "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+    "code": "8640",
+    "display": "prednisone"
+   },
+   {
+    "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+    "code": "34905",
+    "display": "proparacaine"
+   },
+   {
+    "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+    "code": "10831",
+    "display": "sulfamethoxazole / trimethoprim"
+   },
+   {
+    "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+    "code": "10395",
+    "display": "tetracycline"
+   },
+   {
+    "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+    "code": "10600",
+    "display": "timolol"
+   },
+   {
+    "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+    "code": "10689",
+    "display": "tramadol"
+   },
+   {
+    "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+    "code": "10829",
+    "display": "trimethoprim"
+   },
+   {
+    "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+    "code": "10869",
+    "display": "tropicamide"
+   },
+   {
+    "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+    "code": "11124",
+    "display": "vancomycin"
+   }
+  ]
+ }
+}
