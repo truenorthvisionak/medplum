@@ -15,7 +15,7 @@ Image Manager/Archive + MWL SCP role.
 | --- | --- | --- | --- |
 | **Topcon OMNIA** | Auto kerato-refracto-**tonometer** (AR + keratometry + NCT IOP) | DICOM-capable; exports to IMAGEnet / shared folder; feeds RDx refraction start point | via IMAGEnet / DICOM (confirm MWL support on unit) |
 | **Topcon SOLOS** | Automatic lensmeter (habitual Rx) | JOIA-compliant XML export; feeds RDx | n/a (operator-driven) |
-| **Topcon CV-5000S** | Digital phoropter — the RDx remote-refraction instrument | Final subjective refraction via RDx/Harmony → EMR feed (confirm interface spec) | n/a (driven by RDx session) |
+| **Topcon CV-5000S** | Digital phoropter — the RDx remote-refraction instrument | Per its manual: LAN **data-file link in XML format** to a shared folder ("Data file configuration" → XML file format; "[I/O] Database connection" serial as legacy fallback). OIE watches the folder → refraction Observations. Also IMPORTS data files (AR/LM starting values, demographics) from the same folder. RDx/Harmony feed TBC — the file link is the vendor-independent path. | n/a (driven by RDx session or file import) |
 | **Topcon Maestro2** | OCT + color fundus camera | DICOM (OPT/OP) via IMAGEnet 6 | DICOM MWL via IMAGEnet 6 |
 | **Topcon TERA** | Placido topography + dry eye imaging suite | images/reports; confirm DICOM vs file export with Topcon DICOM conformance docs | confirm |
 | **Topcon DC-4** | Slit lamp digital camera | DICOM (OP) via IMAGEnet 6; stills reviewable in RDx lane | via IMAGEnet 6 |
