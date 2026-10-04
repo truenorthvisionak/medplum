@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 import {
   Autocomplete,
+  Badge,
   Button,
   Card,
   Grid,
@@ -15,14 +16,15 @@ import {
   Textarea,
   Title,
 } from '@mantine/core';
+import { useDebouncedCallback } from '@mantine/hooks';
 import { notifications } from '@mantine/notifications';
 import { normalizeErrorString } from '@medplum/core';
 import type { Encounter, Observation, Patient, Practitioner } from '@medplum/fhirtypes';
-import { useMedplum, useMedplumProfile } from '@medplum/react';
-import { IconCircleCheck, IconCircleOff } from '@tabler/icons-react';
+import { Loading, useMedplum, useMedplumProfile } from '@medplum/react';
 import type { JSX } from 'react';
-import { useState } from 'react';
-import type { VaCorrection } from '../../eyecare/codes';
+import { useEffect, useRef, useState } from 'react';
+import { SAVE_TIMEOUT_MS } from '../../config/constants';
+import type { AnteriorSegmentField, PosteriorSegmentField, VaCorrection } from '../../eyecare/codes';
 import {
   ANTERIOR_SEGMENT_FIELDS,
   EYE_EXAM_PANEL_CODE,
@@ -31,7 +33,17 @@ import {
 } from '../../eyecare/codes';
 import { EXAM_TEMPLATES } from '../../eyecare/examTemplates';
 import type { EyeExamValues, NumericInput, RefractionEyeValues } from '../../eyecare/observations';
-import { EMPTY_EYE_EXAM, buildEyeExamBundle, examHasValues, valuesFromExam } from '../../eyecare/observations';
+import {
+  EMPTY_EYE_EXAM,
+  EXAM_SLOT_SYSTEM,
+  buildExamPanel,
+  buildExamUpsertBundle,
+  examHasValues,
+  valuesFromExam,
+  valuesFromObservations,
+} from '../../eyecare/observations';
+import type { SaveState } from './SaveBadge';
+import { SaveBadge } from './SaveBadge';
 
 const SNELLEN_OPTIONS = [
   '20/10',
@@ -69,37 +81,118 @@ const VA_ROWS: { correction: VaCorrection; label: string }[] = [
 
 export interface EyeExamFormProps {
   readonly patient: Patient;
-  /** Visit the saved exam attaches to (undefined = chart-only). */
-  readonly encounter?: Encounter;
-  /** Text shown next to the save button describing the attachment target. */
-  readonly attachLabel?: string;
-  readonly onSaved?: () => void | Promise<void>;
+  /** The visit this exam belongs to — the exam is a living document until the visit ends. */
+  readonly encounter: Encounter;
+  readonly readOnly?: boolean;
+  /** Called after each successful autosave (e.g. to refresh a summary). */
+  readonly onChanged?: () => void;
 }
 
 /**
- * The eye exam charting form (VA / refraction / IOP / segments / templates),
- * shared by the patient-level Eye Exam tab and the encounter charting screen.
+ * ECW/Nextech-style exam charting: every element has separate OD and OS
+ * fields, and the exam autosaves continuously — it stays editable for the
+ * whole visit and locks when the encounter ends or the note is signed.
+ * @param props - The component props.
+ * @returns The autosaving per-eye exam form.
  */
 export function EyeExamForm(props: EyeExamFormProps): JSX.Element {
-  const { patient, encounter, attachLabel, onSaved } = props;
+  const { patient, encounter, readOnly = false, onChanged } = props;
   const medplum = useMedplum();
   const profile = useMedplumProfile() as Practitioner;
   const [values, setValues] = useState<EyeExamValues>(structuredClone(EMPTY_EYE_EXAM));
   const [selectedTemplate, setSelectedTemplate] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
+  const [saveState, setSaveState] = useState<SaveState>('loading');
   const [copying, setCopying] = useState(false);
+  const valuesRef = useRef(values);
+  valuesRef.current = values;
+  // Pre-slot-autosave exam observations on this encounter, replaced on the next save
+  const legacyIdsRef = useRef<string[]>([]);
+
+  // Load the visit's existing exam so editing resumes where it left off
+  useEffect(() => {
+    let active = true;
+    medplum
+      .searchResources(
+        'Observation',
+        { encounter: `Encounter/${encounter.id}`, _count: '100' },
+        { cache: 'no-cache' }
+      )
+      .then((observations) => {
+        if (!active) {
+          return;
+        }
+        const { values: loaded, notes, legacyIds } = valuesFromObservations(observations);
+        legacyIdsRef.current = legacyIds;
+        setValues({ ...loaded, notes });
+        setSaveState('clean');
+      })
+      .catch((err) => {
+        if (active) {
+          setSaveState('error');
+          console.error(err);
+        }
+      });
+    return () => {
+      active = false;
+    };
+  }, [medplum, encounter.id]);
+
+  const save = async (): Promise<void> => {
+    setSaveState('saving');
+    try {
+      const ctx = {
+        patient,
+        performer: profile,
+        encounter,
+        effectiveDateTime: encounter.period?.start ?? new Date().toISOString(),
+      };
+      const bundle = buildExamUpsertBundle(ctx, valuesRef.current);
+      // Their values were loaded into the form, so slot observations now carry them
+      for (const id of legacyIdsRef.current) {
+        bundle.entry?.push({ request: { method: 'DELETE', url: `Observation/${id}` } });
+      }
+      const result = await medplum.executeBatch(bundle);
+      legacyIdsRef.current = [];
+      const members = (result.entry ?? [])
+        .map((e) => e.resource as Observation | undefined)
+        .filter((r): r is Observation => r?.resourceType === 'Observation' && !!r.id);
+
+      const panelUrl = `${medplum.fhirUrl('Observation')}?identifier=${EXAM_SLOT_SYSTEM}|${encodeURIComponent(
+        `${encounter.id}:panel`
+      )}`;
+      if (members.length > 0 || valuesRef.current.notes?.trim()) {
+        const panel = buildExamPanel(ctx, members, valuesRef.current.notes);
+        await medplum.put(panelUrl, panel);
+      } else {
+        await medplum.delete(panelUrl);
+      }
+      setSaveState('saved');
+      onChanged?.();
+    } catch (err) {
+      setSaveState('error');
+      notifications.show({ color: 'red', title: 'Exam autosave failed', message: normalizeErrorString(err) });
+    }
+  };
+
+  const debouncedSave = useDebouncedCallback(() => {
+    save().catch(console.error);
+  }, SAVE_TIMEOUT_MS);
+
+  const update = (fn: (prev: EyeExamValues) => EyeExamValues): void => {
+    setValues(fn);
+    setSaveState('dirty');
+    debouncedSave();
+  };
 
   const setVa = (correction: VaCorrection, eye: 'OD' | 'OS', value: string): void => {
-    setValues((prev) => ({
+    update((prev) => ({
       ...prev,
       visualAcuity: { ...prev.visualAcuity, [correction]: { ...prev.visualAcuity[correction], [eye]: value } },
     }));
   };
 
   const setRefraction = (eye: 'OD' | 'OS', field: keyof RefractionEyeValues, value: NumericInput): void => {
-    // Keep the raw value (including in-progress strings like "1." or "-") so
-    // typing decimals isn't interrupted; parsing happens on save.
-    setValues((prev) => ({
+    update((prev) => ({
       ...prev,
       refraction: {
         ...prev.refraction,
@@ -109,11 +202,19 @@ export function EyeExamForm(props: EyeExamFormProps): JSX.Element {
   };
 
   const setIop = (eye: 'OD' | 'OS', value: NumericInput): void => {
-    setValues((prev) => ({ ...prev, iop: { ...prev.iop, [eye]: value === '' ? undefined : value } }));
+    update((prev) => ({ ...prev, iop: { ...prev.iop, [eye]: value === '' ? undefined : value } }));
   };
 
-  const setSegmentField = (segment: 'anteriorSegment' | 'posteriorSegment', key: string, value: string): void => {
-    setValues((prev) => ({ ...prev, [segment]: { ...prev[segment], [key]: value } }));
+  const setSegmentField = (
+    segment: 'anteriorSegment' | 'posteriorSegment',
+    eye: 'OD' | 'OS',
+    key: string,
+    value: string
+  ): void => {
+    update((prev) => ({
+      ...prev,
+      [segment]: { ...prev[segment], [eye]: { ...prev[segment][eye], [key]: value } },
+    }));
   };
 
   const applyTemplate = (): void => {
@@ -121,10 +222,10 @@ export function EyeExamForm(props: EyeExamFormProps): JSX.Element {
     if (!template) {
       return;
     }
-    setValues((prev) => ({
+    update((prev) => ({
       ...prev,
-      anteriorSegment: { ...template.anteriorSegment },
-      posteriorSegment: { ...template.posteriorSegment },
+      anteriorSegment: { OD: { ...template.anteriorSegment }, OS: { ...template.anteriorSegment } },
+      posteriorSegment: { OD: { ...template.posteriorSegment }, OS: { ...template.posteriorSegment } },
     }));
   };
 
@@ -147,10 +248,11 @@ export function EyeExamForm(props: EyeExamFormProps): JSX.Element {
       for (const obs of resources) {
         members.set(`Observation/${obs.id}`, obs);
       }
-      // Most recent panel that actually contains chartable exam content
       let copied;
       let fromDate: string | undefined;
-      for (const panel of resources.filter((obs) => obs.hasMember)) {
+      for (const panel of resources.filter(
+        (obs) => obs.hasMember && obs.encounter?.reference !== `Encounter/${encounter.id}`
+      )) {
         const candidate = valuesFromExam(panel, members);
         if (examHasValues(candidate)) {
           copied = candidate;
@@ -162,11 +264,11 @@ export function EyeExamForm(props: EyeExamFormProps): JSX.Element {
         notifications.show({ color: 'yellow', title: 'Nothing to copy', message: 'No previous exam on file.' });
         return;
       }
-      setValues(copied);
+      update(() => copied);
       notifications.show({
         color: 'blue',
         title: 'Copied forward',
-        message: `Loaded exam from ${fromDate ?? 'previous visit'} — review and edit before saving.`,
+        message: `Loaded exam from ${fromDate ?? 'previous visit'} — review and edit.`,
       });
     } catch (err) {
       notifications.show({ color: 'red', title: 'Error', message: normalizeErrorString(err) });
@@ -175,44 +277,71 @@ export function EyeExamForm(props: EyeExamFormProps): JSX.Element {
     }
   };
 
-  const handleSave = async (): Promise<void> => {
-    const bundle = buildEyeExamBundle(
-      { patient, performer: profile, encounter, effectiveDateTime: new Date().toISOString() },
-      values
-    );
-    if (!bundle) {
-      notifications.show({
-        color: 'yellow',
-        icon: <IconCircleOff />,
-        title: 'Nothing to save',
-        message: 'Enter at least one exam value first.',
-      });
-      return;
-    }
-    setSaving(true);
-    try {
-      await medplum.executeBatch(bundle);
-      notifications.show({
-        color: 'green',
-        icon: <IconCircleCheck />,
-        title: 'Eye exam saved',
-        message: 'Observations recorded for this patient.',
-      });
-      setValues(structuredClone(EMPTY_EYE_EXAM));
-      await onSaved?.();
-    } catch (err) {
-      notifications.show({ color: 'red', icon: <IconCircleOff />, title: 'Error', message: normalizeErrorString(err) });
-    } finally {
-      setSaving(false);
-    }
-  };
+  if (saveState === 'loading') {
+    return <Loading />;
+  }
+
+  const segmentTable = (
+    segment: 'anteriorSegment' | 'posteriorSegment',
+    fields: readonly { key: AnteriorSegmentField | PosteriorSegmentField; label: string }[],
+    title: string
+  ): JSX.Element => (
+    <>
+      <Text fw={600} size="sm" mt="md">
+        {title}
+      </Text>
+      <Table mt={4} withRowBorders={false} verticalSpacing={4}>
+        <Table.Thead>
+          <Table.Tr>
+            <Table.Th style={{ width: '18%' }} />
+            <Table.Th>OD (Right)</Table.Th>
+            <Table.Th>OS (Left)</Table.Th>
+          </Table.Tr>
+        </Table.Thead>
+        <Table.Tbody>
+          {fields.map((field) => (
+            <Table.Tr key={field.key}>
+              <Table.Td>
+                <Text size="sm">{field.label}</Text>
+              </Table.Td>
+              {(['OD', 'OS'] as const).map((eye) => (
+                <Table.Td key={eye}>
+                  <TextInput
+                    size="xs"
+                    value={(values[segment][eye] as Record<string, string>)[field.key] ?? ''}
+                    onChange={(e) => setSegmentField(segment, eye, field.key, e.target.value)}
+                    aria-label={`${field.label} ${eye}`}
+                    disabled={readOnly}
+                  />
+                </Table.Td>
+              ))}
+            </Table.Tr>
+          ))}
+        </Table.Tbody>
+      </Table>
+    </>
+  );
 
   return (
     <Stack gap="md">
-      <Group>
-        <Button size="xs" variant="default" onClick={() => copyForward().catch(console.error)} loading={copying}>
-          Copy forward last exam
-        </Button>
+      <Group justify="space-between">
+        <Group gap="xs">
+          <Button
+            size="xs"
+            variant="default"
+            onClick={() => copyForward().catch(console.error)}
+            loading={copying}
+            disabled={readOnly}
+          >
+            Copy forward last exam
+          </Button>
+          {readOnly && (
+            <Badge variant="light" color="gray">
+              Visit ended — exam locked
+            </Badge>
+          )}
+        </Group>
+        {!readOnly && <SaveBadge state={saveState} />}
       </Group>
 
       <Card withBorder shadow="sm">
@@ -240,6 +369,7 @@ export function EyeExamForm(props: EyeExamFormProps): JSX.Element {
                       onChange={(value) => setVa(row.correction, eye, value)}
                       placeholder="20/20"
                       aria-label={`${row.label} ${eye}`}
+                      disabled={readOnly}
                     />
                   </Table.Td>
                 ))}
@@ -269,6 +399,7 @@ export function EyeExamForm(props: EyeExamFormProps): JSX.Element {
                 value={values.refraction[eye].sphere ?? ''}
                 onChange={(v) => setRefraction(eye, 'sphere', v)}
                 aria-label={`Sphere ${eye}`}
+                disabled={readOnly}
               />
             </Grid.Col>
             <Grid.Col span={2}>
@@ -282,6 +413,7 @@ export function EyeExamForm(props: EyeExamFormProps): JSX.Element {
                 value={values.refraction[eye].cylinder ?? ''}
                 onChange={(v) => setRefraction(eye, 'cylinder', v)}
                 aria-label={`Cylinder ${eye}`}
+                disabled={readOnly}
               />
             </Grid.Col>
             <Grid.Col span={2}>
@@ -294,6 +426,7 @@ export function EyeExamForm(props: EyeExamFormProps): JSX.Element {
                 value={values.refraction[eye].axis ?? ''}
                 onChange={(v) => setRefraction(eye, 'axis', v)}
                 aria-label={`Axis ${eye}`}
+                disabled={readOnly}
               />
             </Grid.Col>
             <Grid.Col span={2}>
@@ -307,6 +440,7 @@ export function EyeExamForm(props: EyeExamFormProps): JSX.Element {
                 value={values.refraction[eye].add ?? ''}
                 onChange={(v) => setRefraction(eye, 'add', v)}
                 aria-label={`Add ${eye}`}
+                disabled={readOnly}
               />
             </Grid.Col>
           </Grid>
@@ -324,6 +458,7 @@ export function EyeExamForm(props: EyeExamFormProps): JSX.Element {
             value={values.iop.OD ?? ''}
             onChange={(v) => setIop('OD', v)}
             style={{ width: 110 }}
+            disabled={readOnly}
           />
           <NumberInput
             size="xs"
@@ -333,15 +468,17 @@ export function EyeExamForm(props: EyeExamFormProps): JSX.Element {
             value={values.iop.OS ?? ''}
             onChange={(v) => setIop('OS', v)}
             style={{ width: 110 }}
+            disabled={readOnly}
           />
           <Select
             size="xs"
             label="Method"
             data={TONOMETRY_OPTIONS}
             value={values.iop.method ?? null}
-            onChange={(v) => setValues((prev) => ({ ...prev, iop: { ...prev.iop, method: v ?? undefined } }))}
+            onChange={(v) => update((prev) => ({ ...prev, iop: { ...prev.iop, method: v ?? undefined } }))}
             style={{ width: 200 }}
             clearable
+            disabled={readOnly}
           />
         </Group>
       </Card>
@@ -359,44 +496,16 @@ export function EyeExamForm(props: EyeExamFormProps): JSX.Element {
               onChange={setSelectedTemplate}
               style={{ width: 230 }}
               clearable
+              disabled={readOnly}
             />
-            <Button size="xs" variant="light" onClick={applyTemplate} disabled={!selectedTemplate}>
-              Fill from template
+            <Button size="xs" variant="light" onClick={applyTemplate} disabled={!selectedTemplate || readOnly}>
+              Fill both eyes from template
             </Button>
           </Group>
         </Group>
 
-        <Text fw={600} size="sm" mt="md">
-          Anterior segment (slit lamp)
-        </Text>
-        <Grid mt={4}>
-          {ANTERIOR_SEGMENT_FIELDS.map((field) => (
-            <Grid.Col key={field.key} span={{ base: 12, sm: 6 }}>
-              <TextInput
-                size="xs"
-                label={field.label}
-                value={values.anteriorSegment[field.key] ?? ''}
-                onChange={(e) => setSegmentField('anteriorSegment', field.key, e.target.value)}
-              />
-            </Grid.Col>
-          ))}
-        </Grid>
-
-        <Text fw={600} size="sm" mt="md">
-          Posterior segment (fundus)
-        </Text>
-        <Grid mt={4}>
-          {POSTERIOR_SEGMENT_FIELDS.map((field) => (
-            <Grid.Col key={field.key} span={{ base: 12, sm: 6 }}>
-              <TextInput
-                size="xs"
-                label={field.label}
-                value={values.posteriorSegment[field.key] ?? ''}
-                onChange={(e) => setSegmentField('posteriorSegment', field.key, e.target.value)}
-              />
-            </Grid.Col>
-          ))}
-        </Grid>
+        {segmentTable('anteriorSegment', ANTERIOR_SEGMENT_FIELDS, 'Anterior segment (slit lamp)')}
+        {segmentTable('posteriorSegment', POSTERIOR_SEGMENT_FIELDS, 'Posterior segment (fundus)')}
 
         <Textarea
           mt="md"
@@ -405,20 +514,10 @@ export function EyeExamForm(props: EyeExamFormProps): JSX.Element {
           autosize
           minRows={2}
           value={values.notes ?? ''}
-          onChange={(e) => setValues((prev) => ({ ...prev, notes: e.target.value }))}
+          onChange={(e) => update((prev) => ({ ...prev, notes: e.target.value }))}
+          disabled={readOnly}
         />
       </Card>
-
-      <Group align="center">
-        <Button onClick={() => handleSave().catch(console.error)} loading={saving}>
-          Save Eye Exam
-        </Button>
-        {attachLabel && (
-          <Text size="sm" c="dimmed">
-            {attachLabel}
-          </Text>
-        )}
-      </Group>
     </Stack>
   );
 }

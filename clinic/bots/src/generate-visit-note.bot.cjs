@@ -158,16 +158,38 @@ function buildExamSection(observations) {
     );
   }
 
-  const segments = [];
+  // Segments are stored per eye; merge into one row per structure (OD / OS)
+  const segmentMap = new Map();
   for (const obs of members) {
     const codeText = obs.code?.text ?? '';
     if (codeText.includes('segment exam') && obs.component?.length) {
-      const findings = obs.component
-        .map((c) => `${c.code?.text ?? ''}: ${c.valueString ?? ''}`)
-        .filter((s) => s.trim() !== ':');
-      segments.push({ title: codeText, findings });
+      const eye = laterality(obs);
+      const structures = segmentMap.get(codeText) ?? new Map();
+      for (const c of obs.component) {
+        const name = c.code?.text;
+        const value = c.valueString;
+        if (name && value) {
+          const entry = structures.get(name) ?? {};
+          if (eye === 'OU') {
+            entry.OD = entry.OD ?? value;
+            entry.OS = entry.OS ?? value;
+          } else {
+            entry[eye] = value;
+          }
+          structures.set(name, entry);
+        }
+      }
+      segmentMap.set(codeText, structures);
     }
   }
+  const segments = [...segmentMap.entries()].map(([title, structures]) => ({
+    title,
+    findings: [...structures.entries()].map(([name, e]) =>
+      e.OD && e.OD === e.OS
+        ? `${name}: ${e.OD} (OU)`
+        : `${name}: OD ${e.OD ?? '—'}   OS ${e.OS ?? '—'}`
+    ),
+  }));
 
   const panelNotes = panels.map((p) => p.note?.[0]?.text).filter(Boolean);
 

@@ -1,8 +1,9 @@
 // SPDX-FileCopyrightText: Copyright Orangebot, Inc. and Medplum contributors
 // SPDX-License-Identifier: Apache-2.0
-import { Divider, Stack, Table, Text } from '@mantine/core';
+import { Alert, Divider, Stack, Table, Text } from '@mantine/core';
 import type { Encounter, Observation } from '@medplum/fhirtypes';
 import { Loading, useMedplum } from '@medplum/react';
+import { IconInfoCircle } from '@tabler/icons-react';
 import type { JSX } from 'react';
 import { useCallback, useEffect, useState } from 'react';
 import { EyeExamForm } from '../../components/eyecare/EyeExamForm';
@@ -19,8 +20,9 @@ export function EyeExamPage(): JSX.Element {
   const patient = usePatient();
   const [history, setHistory] = useState<EyeExamSummary[] | undefined>(undefined);
   const [activeEncounter, setActiveEncounter] = useState<Encounter | undefined>(undefined);
+  const [encountersLoaded, setEncountersLoaded] = useState(false);
 
-  // The most recent open visit for this patient; saved exams attach to it
+  // Exams are visit documents: charting happens against the open visit
   useEffect(() => {
     if (!patient?.id) {
       return;
@@ -31,7 +33,10 @@ export function EyeExamPage(): JSX.Element {
         { subject: `Patient/${patient.id}`, _sort: '-_lastUpdated', _count: '20' },
         { cache: 'no-cache' }
       )
-      .then((encounters) => setActiveEncounter(encounters.find((e) => OPEN_ENCOUNTER_STATUSES.has(e.status))))
+      .then((encounters) => {
+        setActiveEncounter(encounters.find((e) => OPEN_ENCOUNTER_STATUSES.has(e.status)));
+        setEncountersLoaded(true);
+      })
       .catch(console.error);
   }, [medplum, patient?.id]);
 
@@ -63,21 +68,30 @@ export function EyeExamPage(): JSX.Element {
     loadHistory().catch(console.error);
   }, [loadHistory]);
 
-  if (!patient) {
+  if (!patient || !encountersLoaded) {
     return <Loading />;
   }
 
-  const attachLabel = activeEncounter
-    ? `Will attach to the open visit: ${activeEncounter.type?.[0]?.text ?? 'Visit'} (${activeEncounter.status})`
-    : 'No open visit — this exam will be saved to the chart only.';
-
   return (
     <Stack gap="md" p="md">
-      <EyeExamForm patient={patient} encounter={activeEncounter} attachLabel={attachLabel} onSaved={loadHistory} />
+      {activeEncounter ? (
+        <>
+          <Text size="sm" c="dimmed">
+            Charting the open visit: {activeEncounter.type?.[0]?.text ?? 'Visit'} ({activeEncounter.status}) — the
+            exam autosaves and stays editable until the visit ends.
+          </Text>
+          <EyeExamForm patient={patient} encounter={activeEncounter} onChanged={loadHistory} />
+        </>
+      ) : (
+        <Alert icon={<IconInfoCircle />} color="blue" variant="light">
+          No open visit. Exams are charted as part of a visit — create one from the schedule (double-click an
+          appointment) and the exam form will appear here and on the visit page.
+        </Alert>
+      )}
 
       <Divider label="Previous Exams" labelPosition="left" />
       {!history && <Loading />}
-      {history && history.length === 0 && (
+      {history?.length === 0 && (
         <Text c="dimmed" size="sm">
           No previous eye exams recorded.
         </Text>

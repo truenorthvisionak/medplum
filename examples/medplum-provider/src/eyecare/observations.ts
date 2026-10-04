@@ -54,8 +54,8 @@ export interface EyeExamValues {
   visualAcuity: Record<VaCorrection, { OD?: string; OS?: string }>;
   refraction: { OD: RefractionEyeValues; OS: RefractionEyeValues };
   iop: { OD?: NumericInput; OS?: NumericInput; method?: string };
-  anteriorSegment: Partial<Record<AnteriorSegmentField, string>>;
-  posteriorSegment: Partial<Record<PosteriorSegmentField, string>>;
+  anteriorSegment: Record<'OD' | 'OS', Partial<Record<AnteriorSegmentField, string>>>;
+  posteriorSegment: Record<'OD' | 'OS', Partial<Record<PosteriorSegmentField, string>>>;
   notes?: string;
 }
 
@@ -63,8 +63,8 @@ export const EMPTY_EYE_EXAM: EyeExamValues = {
   visualAcuity: { uncorrected: {}, corrected: {}, pinhole: {} },
   refraction: { OD: {}, OS: {} },
   iop: {},
-  anteriorSegment: {},
-  posteriorSegment: {},
+  anteriorSegment: { OD: {}, OS: {} },
+  posteriorSegment: { OD: {}, OS: {} },
 };
 
 function toNumber(value: NumericInput | undefined): number | undefined {
@@ -78,7 +78,7 @@ function toNumber(value: NumericInput | undefined): number | undefined {
   return undefined;
 }
 
-interface BuildContext {
+export interface BuildContext {
   patient: Patient;
   performer: Practitioner;
   encounter?: Encounter;
@@ -111,6 +111,9 @@ function quantity(value: number, unit: string, code: string): { value: number; u
 /**
  * Builds the individual member observations for an eye exam.
  * Only sections with values entered produce observations.
+ * @param ctx - Patient, performer, encounter, and effective time for the observations.
+ * @param values - The exam form values.
+ * @returns One observation per filled exam element.
  */
 export function buildEyeExamObservations(ctx: BuildContext, values: EyeExamValues): Observation[] {
   const result: Observation[] = [];
@@ -180,23 +183,25 @@ export function buildEyeExamObservations(ctx: BuildContext, values: EyeExamValue
     }
   }
 
-  // Segment findings: one observation per segment, one component per structure
+  // Segment findings: one observation per segment PER EYE, one component per structure
   const segments = [
     { code: ANTERIOR_SEGMENT_CODE, fields: ANTERIOR_SEGMENT_FIELDS, values: values.anteriorSegment },
     { code: POSTERIOR_SEGMENT_CODE, fields: POSTERIOR_SEGMENT_FIELDS, values: values.posteriorSegment },
   ] as const;
   for (const segment of segments) {
-    const components = [];
-    for (const field of segment.fields) {
-      const value = (segment.values as Record<string, string | undefined>)[field.key]?.trim();
-      if (value) {
-        components.push({ code: { text: field.label }, valueString: value });
+    for (const eye of ['OD', 'OS'] as const) {
+      const components = [];
+      for (const field of segment.fields) {
+        const value = (segment.values[eye] as Record<string, string | undefined>)[field.key]?.trim();
+        if (value) {
+          components.push({ code: { text: field.label }, valueString: value });
+        }
       }
-    }
-    if (components.length > 0) {
-      const obs = baseObservation(ctx, segment.code, 'OU');
-      obs.component = components;
-      result.push(obs);
+      if (components.length > 0) {
+        const obs = baseObservation(ctx, segment.code, eye);
+        obs.component = components;
+        result.push(obs);
+      }
     }
   }
 
@@ -207,6 +212,9 @@ export function buildEyeExamObservations(ctx: BuildContext, values: EyeExamValue
  * Builds a FHIR transaction bundle: a parent "eye exam" panel observation
  * whose hasMember references the individual observations.
  * Returns undefined if the form has no values at all.
+ * @param ctx - Patient, performer, encounter, and effective time for the observations.
+ * @param values - The exam form values.
+ * @returns The transaction bundle, or undefined for an empty form.
  */
 export function buildEyeExamBundle(ctx: BuildContext, values: EyeExamValues): Bundle | undefined {
   const members = buildEyeExamObservations(ctx, values);
@@ -241,6 +249,9 @@ export function buildEyeExamBundle(ctx: BuildContext, values: EyeExamValues): Bu
  * Inverse of buildEyeExamObservations: reconstructs form values from a stored
  * exam (panel + members), used by "Copy forward last exam". Panel notes are
  * intentionally not copied — they are visit-specific.
+ * @param panel - The exam panel observation (hasMember references).
+ * @param members - Lookup of member observations by `Observation/<id>` reference.
+ * @returns The reconstructed form values.
  */
 export function valuesFromExam(panel: Observation, members: Map<string, Observation>): EyeExamValues {
   const values = structuredClone(EMPTY_EYE_EXAM);
@@ -283,10 +294,14 @@ export function valuesFromExam(panel: Observation, members: Map<string, Observat
     ];
     for (const spec of segmentSpecs) {
       if (codeText === spec.match && obs.component?.length) {
+        // Legacy exams stored one OU observation per segment; write those into both eyes
+        const targetEyes: ('OD' | 'OS')[] = eye === 'OD' || eye === 'OS' ? [eye] : ['OD', 'OS'];
         for (const comp of obs.component) {
           const field = spec.fields.find((f) => f.label === comp.code?.text);
           if (field && comp.valueString) {
-            (values[spec.key] as Record<string, string>)[field.key] = comp.valueString;
+            for (const targetEye of targetEyes) {
+              (values[spec.key][targetEye] as Record<string, string>)[field.key] = comp.valueString;
+            }
           }
         }
       }
@@ -296,14 +311,158 @@ export function valuesFromExam(panel: Observation, members: Map<string, Observat
   return values;
 }
 
-/** True if the values contain any chartable exam content. */
+/**
+ * True if the values contain any chartable exam content.
+ * @param values - The exam form values.
+ * @returns Whether any exam element is filled in.
+ */
 export function examHasValues(values: EyeExamValues): boolean {
   const vaFilled = Object.values(values.visualAcuity).some((eyes) => eyes.OD || eyes.OS);
   const refractionFilled = (['OD', 'OS'] as const).some((eye) =>
     Object.values(values.refraction[eye]).some((v) => v !== undefined)
   );
   const iopFilled = values.iop.OD !== undefined || values.iop.OS !== undefined;
-  const segmentsFilled =
-    Object.values(values.anteriorSegment).some(Boolean) || Object.values(values.posteriorSegment).some(Boolean);
+  const segmentsFilled = (['OD', 'OS'] as const).some(
+    (eye) =>
+      Object.values(values.anteriorSegment[eye]).some(Boolean) ||
+      Object.values(values.posteriorSegment[eye]).some(Boolean)
+  );
   return vaFilled || refractionFilled || iopFilled || segmentsFilled;
+}
+
+/** Identifier system for the per-slot upsert of a visit's live exam. */
+export const EXAM_SLOT_SYSTEM = 'urn:clinic:exam-slot';
+
+/**
+ * Builds a FHIR transaction that upserts the visit's exam in place, one
+ * conditional PUT per filled observation "slot" (keyed by encounter + slot
+ * identifier) and one conditional DELETE per emptied slot — so the exam is a
+ * living document the clinician edits for the whole visit, with each slot
+ * keeping its own version history. Requires an encounter.
+ * @param ctx - Patient, performer, and the visit encounter the exam belongs to.
+ * @param values - The current exam form values.
+ * @returns A transaction bundle of conditional PUTs and DELETEs.
+ */
+export function buildExamUpsertBundle(ctx: BuildContext & { encounter: Encounter }, values: EyeExamValues): Bundle {
+  const observations = buildEyeExamObservations(ctx, values);
+
+  const slotKey = (obs: Observation): string => {
+    const code = obs.code?.coding?.[0]?.code ?? obs.code?.text ?? 'obs';
+    const eye = obs.bodySite?.coding?.[0]?.code ?? 'na';
+    return `${ctx.encounter.id}:${code}:${eye}`;
+  };
+
+  const filled = new Map<string, Observation>();
+  for (const obs of observations) {
+    filled.set(slotKey(obs), obs);
+  }
+
+  const entries: BundleEntry[] = [];
+  for (const [key, obs] of filled) {
+    entries.push({
+      resource: { ...obs, identifier: [{ system: EXAM_SLOT_SYSTEM, value: key }] },
+      request: { method: 'PUT', url: `Observation?identifier=${EXAM_SLOT_SYSTEM}|${encodeURIComponent(key)}` },
+    });
+  }
+
+  // Delete every possible slot that is not currently filled
+  const allSlots: string[] = [];
+  for (const correction of ['420050001', '419775003', '419475002']) {
+    for (const eye of ['1290032005', '1290031003']) {
+      allSlots.push(`${ctx.encounter.id}:${correction}:${eye}`);
+    }
+  }
+  for (const code of ['251794006', '41633001']) {
+    for (const eye of ['1290032005', '1290031003']) {
+      allSlots.push(`${ctx.encounter.id}:${code}:${eye}`);
+    }
+  }
+  for (const segment of [ANTERIOR_SEGMENT_CODE.text, POSTERIOR_SEGMENT_CODE.text]) {
+    for (const eye of ['1290032005', '1290031003', '362508001']) {
+      allSlots.push(`${ctx.encounter.id}:${segment}:${eye}`);
+    }
+  }
+  for (const key of allSlots) {
+    if (!filled.has(key)) {
+      entries.push({
+        request: { method: 'DELETE', url: `Observation?identifier=${EXAM_SLOT_SYSTEM}|${encodeURIComponent(key)}` },
+      });
+    }
+  }
+
+  return { resourceType: 'Bundle', type: 'transaction', entry: entries };
+}
+
+/**
+ * Upserts the panel observation that groups a visit's exam (used by history
+ * views and copy-forward). Call after buildExamUpsertBundle executes, with the
+ * member observations the server returned.
+ * @param ctx - Patient, performer, and the visit encounter the exam belongs to.
+ * @param members - The saved member observations (must have server ids).
+ * @param notes - Visit-specific note text for the panel.
+ * @returns The panel observation to conditionally PUT.
+ */
+export function buildExamPanel(
+  ctx: BuildContext & { encounter: Encounter },
+  members: Observation[],
+  notes: string | undefined
+): Observation {
+  const panel = baseObservation(ctx, EYE_EXAM_PANEL_CODE);
+  panel.identifier = [{ system: EXAM_SLOT_SYSTEM, value: `${ctx.encounter.id}:panel` }];
+  panel.hasMember = members.map((obs) => ({ reference: `Observation/${obs.id}` }));
+  if (notes?.trim()) {
+    panel.note = [{ text: notes.trim() }];
+  }
+  return panel;
+}
+
+const EXAM_OBSERVATION_CODES = new Set(['420050001', '419775003', '419475002', '251794006', '41633001', '36228007']);
+
+/**
+ * True if the observation is part of an eye exam (VA, refraction, IOP,
+ * segment findings, or the exam panel itself).
+ * @param obs - The observation to classify.
+ * @returns Whether the observation belongs to an eye exam.
+ */
+export function isExamObservation(obs: Observation): boolean {
+  const code = obs.code?.coding?.[0]?.code;
+  if (code && EXAM_OBSERVATION_CODES.has(code)) {
+    return true;
+  }
+  const text = obs.code?.text;
+  return text === ANTERIOR_SEGMENT_CODE.text || text === POSTERIOR_SEGMENT_CODE.text;
+}
+
+/**
+ * Rebuilds form values from a flat list of a visit's exam observations
+ * (as loaded by encounter search), plus the panel's visit note text.
+ * Also reports legacy exam observations saved before slot-based autosave
+ * (no exam-slot identifier) so the form can replace them on its next save —
+ * otherwise a cleared field would reappear from the legacy copy on reload.
+ * @param observations - All observations attached to the encounter.
+ * @returns The reconstructed form values, the panel's note text, and legacy exam observation ids.
+ */
+export function valuesFromObservations(observations: Observation[]): {
+  values: EyeExamValues;
+  notes?: string;
+  legacyIds: string[];
+} {
+  const members = observations.filter(
+    (obs) => !observationMatches(obs, EYE_EXAM_PANEL_CODE) && obs.code?.text !== 'Assessment'
+  );
+  const panel = observations.find((obs) => observationMatches(obs, EYE_EXAM_PANEL_CODE));
+  const lookup = new Map(members.map((obs) => [`Observation/${obs.id}`, obs] as const));
+  const syntheticPanel: Observation = {
+    resourceType: 'Observation',
+    status: 'final',
+    code: EYE_EXAM_PANEL_CODE,
+    hasMember: members.map((obs) => ({ reference: `Observation/${obs.id}` })),
+  };
+  const legacyIds = observations
+    .filter(
+      (obs) =>
+        isExamObservation(obs) && !!obs.id && !obs.identifier?.some((i) => i.system === EXAM_SLOT_SYSTEM)
+    )
+    .map((obs) => obs.id as string);
+  return { values: valuesFromExam(syntheticPanel, lookup), notes: panel?.note?.[0]?.text, legacyIds };
 }

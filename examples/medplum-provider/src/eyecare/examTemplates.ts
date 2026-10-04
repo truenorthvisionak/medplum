@@ -17,20 +17,20 @@ const NORMAL_ANTERIOR: Record<AnteriorSegmentField, string> = {
   general: 'Alert and oriented, no acute distress',
   lidsLashes: 'Normal, no blepharitis or lesions',
   adnexa: 'Normal, no ptosis or proptosis',
-  conjSclera: 'White and quiet OU',
-  cornea: 'Clear, no staining OU',
-  anteriorChamber: 'Deep and quiet OU',
-  iris: 'Flat and intact, no NVI OU',
-  lens: 'Clear OU',
+  conjSclera: 'White and quiet',
+  cornea: 'Clear, no staining',
+  anteriorChamber: 'Deep and quiet',
+  iris: 'Flat and intact, no NVI',
+  lens: 'Clear',
 };
 
 const NORMAL_POSTERIOR: Record<PosteriorSegmentField, string> = {
-  vitreous: 'Clear OU',
-  opticDisc: 'Pink, healthy rim, distinct margins OU',
-  cdRatio: '0.3 OU',
-  macula: 'Flat, even pigmentation, no drusen OU',
-  vessels: 'Normal course and caliber, A/V 2/3 OU',
-  periphery: 'Flat and intact 360 OU, no holes or tears',
+  vitreous: 'Clear',
+  opticDisc: 'Pink, healthy rim, distinct margins',
+  cdRatio: '0.3',
+  macula: 'Flat, even pigmentation, no drusen',
+  vessels: 'Normal course and caliber, A/V 2/3',
+  periphery: 'Flat and intact 360°, no holes or tears',
 };
 
 export const EXAM_TEMPLATES: EyeExamTemplate[] = [
@@ -43,28 +43,28 @@ export const EXAM_TEMPLATES: EyeExamTemplate[] = [
     name: 'Diabetic Eye Exam',
     anteriorSegment: {
       ...NORMAL_ANTERIOR,
-      iris: 'No NVI OU',
+      iris: 'No NVI',
     },
     posteriorSegment: {
       ...NORMAL_POSTERIOR,
-      vitreous: 'Clear, no hemorrhage OU',
-      opticDisc: 'Pink, healthy rim, no NVD OU',
-      macula: 'No CSME, no exudates or hemorrhages OU',
-      vessels: 'No NVE, no venous beading or IRMA OU',
-      periphery: 'No dot-blot hemorrhages or microaneurysms OU',
+      vitreous: 'Clear, no hemorrhage',
+      opticDisc: 'Pink, healthy rim, no NVD',
+      macula: 'No CSME, no exudates or hemorrhages',
+      vessels: 'No NVE, no venous beading or IRMA',
+      periphery: 'No dot-blot hemorrhages or microaneurysms',
     },
   },
   {
     name: 'Glaucoma Evaluation',
     anteriorSegment: {
       ...NORMAL_ANTERIOR,
-      anteriorChamber: 'Deep and quiet, angles open Van Herick IV OU',
+      anteriorChamber: 'Deep and quiet, angles open Van Herick IV',
     },
     posteriorSegment: {
       ...NORMAL_POSTERIOR,
-      opticDisc: 'No notching, hemorrhage, or pallor OU',
-      cdRatio: '0.5 OU, symmetric',
-      vessels: 'Normal course and caliber, no baring OU',
+      opticDisc: 'No notching, hemorrhage, or pallor',
+      cdRatio: '0.5, symmetric',
+      vessels: 'Normal course and caliber, no baring',
     },
   },
 ];

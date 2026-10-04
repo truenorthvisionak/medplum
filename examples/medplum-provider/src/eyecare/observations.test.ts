@@ -4,7 +4,15 @@ import type { Bundle, Encounter, Observation, Patient, Practitioner } from '@med
 import { describe, expect, test } from 'vitest';
 import { EYE_EXAM_PANEL_CODE, IOP_CODE, VISUAL_ACUITY_CODE } from './codes';
 import type { EyeExamValues } from './observations';
-import { EMPTY_EYE_EXAM, buildEyeExamBundle, buildEyeExamObservations, valuesFromExam } from './observations';
+import {
+  EMPTY_EYE_EXAM,
+  EXAM_SLOT_SYSTEM,
+  buildExamUpsertBundle,
+  buildEyeExamBundle,
+  buildEyeExamObservations,
+  valuesFromExam,
+  valuesFromObservations,
+} from './observations';
 
 const patient: Patient = { resourceType: 'Patient', id: 'patient-1' };
 const performer: Practitioner = { resourceType: 'Practitioner', id: 'doc-1' };
@@ -98,18 +106,21 @@ describe('buildEyeExamObservations', () => {
     expect(panel?.encounter?.reference).toBe('Encounter/enc-1');
   });
 
-  test('segment fields become components on segment observations', () => {
+  test('segment fields become per-eye observations with one component per structure', () => {
     const values = makeValues({
-      anteriorSegment: { lidsLashes: 'Normal', iris: 'No NVI OU' },
-      posteriorSegment: { cdRatio: '0.3 OU' },
+      anteriorSegment: { OD: { lidsLashes: 'Normal', iris: 'No NVI' }, OS: { iris: 'Rubeosis inferiorly' } },
+      posteriorSegment: { OD: { cdRatio: '0.3' }, OS: {} },
     });
     const result = buildEyeExamObservations(ctx, values);
-    expect(result).toHaveLength(2);
-    const anterior = result.find((o) => o.code.text?.includes('Anterior'));
-    expect(anterior?.component).toHaveLength(2);
-    expect(anterior?.component?.find((c) => c.code.text === 'Iris')?.valueString).toBe('No NVI OU');
-    const posterior = result.find((o) => o.code.text?.includes('Posterior'));
-    expect(posterior?.component?.[0]).toMatchObject({ code: { text: 'C/D Ratio' }, valueString: '0.3 OU' });
+    expect(result).toHaveLength(3);
+    const anteriorOd = result.find((o) => o.code.text?.includes('Anterior') && o.bodySite?.text?.includes('Right'));
+    expect(anteriorOd?.component).toHaveLength(2);
+    expect(anteriorOd?.component?.find((c) => c.code.text === 'Iris')?.valueString).toBe('No NVI');
+    const anteriorOs = result.find((o) => o.code.text?.includes('Anterior') && o.bodySite?.text?.includes('Left'));
+    expect(anteriorOs?.component?.[0]?.valueString).toBe('Rubeosis inferiorly');
+    const posteriorOd = result.find((o) => o.code.text?.includes('Posterior'));
+    expect(posteriorOd?.bodySite?.text).toContain('Right');
+    expect(posteriorOd?.component?.[0]).toMatchObject({ code: { text: 'C/D Ratio' }, valueString: '0.3' });
   });
 });
 
@@ -119,8 +130,8 @@ describe('valuesFromExam', () => {
       visualAcuity: { uncorrected: { OD: '20/40', OS: '20/30' }, corrected: { OD: '20/20', OS: '20/25' }, pinhole: {} },
       refraction: { OD: { sphere: -2.25, cylinder: -0.75, axis: 90, add: 2 }, OS: { sphere: -1.5 } },
       iop: { OD: 17, OS: 18, method: 'goldmann' },
-      anteriorSegment: { lidsLashes: 'Normal', iris: 'No NVI OU' },
-      posteriorSegment: { cdRatio: '0.3 OU' },
+      anteriorSegment: { OD: { lidsLashes: 'Normal', iris: 'No NVI' }, OS: { iris: 'No NVI' } },
+      posteriorSegment: { OD: { cdRatio: '0.3' }, OS: { cdRatio: '0.4' } },
       notes: 'visit-specific note',
     });
     const bundle = buildEyeExamBundle(ctx, original);
@@ -143,6 +154,70 @@ describe('valuesFromExam', () => {
     expect(restored.anteriorSegment).toEqual(original.anteriorSegment);
     expect(restored.posteriorSegment).toEqual(original.posteriorSegment);
     expect(restored.notes).toBeUndefined();
+  });
+});
+
+describe('buildExamUpsertBundle', () => {
+  const encounter: Encounter = { resourceType: 'Encounter', id: 'enc-9', status: 'in-progress', class: { code: 'AMB' } };
+
+  test('filled slots become conditional PUTs with stable identifiers; empty slots conditional DELETEs', () => {
+    const values = makeValues({
+      iop: { OD: 17 },
+      anteriorSegment: { OD: { cornea: 'Clear' }, OS: {} },
+      posteriorSegment: { OD: {}, OS: {} },
+    });
+    const bundle = buildExamUpsertBundle({ ...ctx, encounter }, values);
+    const puts = (bundle.entry ?? []).filter((e) => e.request?.method === 'PUT');
+    const deletes = (bundle.entry ?? []).filter((e) => e.request?.method === 'DELETE');
+    expect(puts).toHaveLength(2);
+    for (const entry of puts) {
+      const obs = entry.resource as Observation;
+      const identifier = obs.identifier?.[0];
+      expect(identifier?.system).toBe(EXAM_SLOT_SYSTEM);
+      expect(identifier?.value?.startsWith('enc-9:')).toBe(true);
+      expect(entry.request?.url).toContain(encodeURIComponent(identifier?.value as string));
+    }
+    expect(deletes.length).toBeGreaterThan(0);
+    for (const entry of deletes) {
+      expect(entry.request?.url).toContain('enc-9');
+    }
+    // Re-running with the same values produces identical slot keys (idempotent upsert)
+    const again = buildExamUpsertBundle({ ...ctx, encounter }, values);
+    const keys = (b: typeof bundle): (string | undefined)[] =>
+      (b.entry ?? [])
+        .filter((e) => e.request?.method === 'PUT')
+        .map((e) => (e.resource as Observation).identifier?.[0]?.value)
+        .sort();
+    expect(keys(again)).toEqual(keys(bundle));
+  });
+});
+
+describe('valuesFromObservations', () => {
+  test('reports legacy exam observations (no slot identifier) for cleanup, loading their values', () => {
+    const legacy: Observation = {
+      resourceType: 'Observation',
+      id: 'legacy-1',
+      status: 'final',
+      code: { coding: [{ system: 'http://snomed.info/sct', code: '41633001' }] },
+      bodySite: { coding: [{ system: 'http://snomed.info/sct', code: '1290032005' }], text: 'Right eye (OD)' },
+      valueQuantity: { value: 16, unit: 'mmHg', system: 'http://unitsofmeasure.org', code: 'mm[Hg]' },
+    };
+    const slotted: Observation = {
+      ...structuredClone(legacy),
+      id: 'slot-1',
+      identifier: [{ system: EXAM_SLOT_SYSTEM, value: 'enc-9:41633001:1290031003' }],
+      bodySite: { coding: [{ system: 'http://snomed.info/sct', code: '1290031003' }], text: 'Left eye (OS)' },
+    };
+    const unrelated: Observation = {
+      resourceType: 'Observation',
+      id: 'bp-1',
+      status: 'final',
+      code: { coding: [{ system: 'http://loinc.org', code: '85354-9' }] },
+    };
+    const { values, legacyIds } = valuesFromObservations([legacy, slotted, unrelated]);
+    expect(values.iop.OD).toBe(16);
+    expect(values.iop.OS).toBe(16);
+    expect(legacyIds).toEqual(['legacy-1']);
   });
 });
 

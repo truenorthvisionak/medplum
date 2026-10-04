@@ -1,16 +1,20 @@
 // SPDX-FileCopyrightText: Copyright Orangebot, Inc. and Medplum contributors
 // SPDX-License-Identifier: Apache-2.0
-import { Badge, Button, Card, Checkbox, Group, Stack, Text, Textarea, Title } from '@mantine/core';
+import { Badge, Box, Card, Checkbox, Group, Stack, Text, Textarea, Title } from '@mantine/core';
+import { useDebouncedCallback } from '@mantine/hooks';
 import { notifications } from '@mantine/notifications';
 import { createReference, normalizeErrorString } from '@medplum/core';
-import type { Condition, Encounter, Observation } from '@medplum/fhirtypes';
-import { useMedplum, useMedplumProfile } from '@medplum/react';
-import { IconCircleCheck } from '@tabler/icons-react';
+import type { CodeableConcept, Condition, Encounter, Observation } from '@medplum/fhirtypes';
+import { CodeableConceptInput, useMedplum, useMedplumProfile } from '@medplum/react';
 import type { JSX } from 'react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { SAVE_TIMEOUT_MS } from '../../config/constants';
 import { EXAM_CATEGORY, PROBLEM_ASSESSMENT_CODE } from '../../eyecare/codes';
+import type { SaveState } from '../eyecare/SaveBadge';
+import { SaveBadge } from '../eyecare/SaveBadge';
 
 const ICD10CM = 'http://hl7.org/fhir/sid/icd-10-cm';
+const CONDITION_CODE_VALUE_SET = 'http://hl7.org/fhir/us/core/ValueSet/us-core-condition-code';
 
 function problemLabel(condition: Condition): { text: string; icd10?: string } {
   const icd10 = condition.code?.coding?.find((c) => c.system === ICD10CM)?.code;
@@ -25,10 +29,11 @@ export interface AssessmentCardProps {
 }
 
 /**
- * Nextech-style assessment: the patient's problem list drives the assessment.
- * Check off the problems addressed this visit; each checked problem gets its
- * own note field, tied to the Condition and its ICD-10 code. Notes are stored
- * as Observations (focus = the Condition) on this visit.
+ * Diagnosis-first assessment (ECW/Nextech model): search an ICD-10 code to
+ * add it to the problem list AND today's assessment, then document under
+ * each code. Notes autosave; everything locks when the note is signed.
+ * @param props - The component props.
+ * @returns The assessment card.
  */
 export function AssessmentCard(props: AssessmentCardProps): JSX.Element {
   const { encounter, enabled } = props;
@@ -39,7 +44,10 @@ export function AssessmentCard(props: AssessmentCardProps): JSX.Element {
   const [existing, setExisting] = useState<Map<string, Observation>>(new Map());
   const [notes, setNotes] = useState<Record<string, string>>({});
   const [addressed, setAddressed] = useState<Set<string>>(new Set());
-  const [saving, setSaving] = useState(false);
+  const [saveState, setSaveState] = useState<SaveState>('clean');
+  const [pickerKey, setPickerKey] = useState(0);
+  const stateRef = useRef({ problems, notes, addressed, existing });
+  stateRef.current = { problems, notes, addressed, existing };
 
   useEffect(() => {
     if (!patientRef) {
@@ -68,34 +76,21 @@ export function AssessmentCard(props: AssessmentCardProps): JSX.Element {
       setProblems(conditions);
       setExisting(byCondition);
       setNotes(initialNotes);
-      // Problems already documented this visit start checked
       setAddressed(new Set(byCondition.keys()));
     };
     load().catch(console.error);
   }, [medplum, patientRef, encounter.id]);
 
-  const toggleAddressed = (conditionId: string, checked: boolean): void => {
-    setAddressed((prev) => {
-      const next = new Set(prev);
-      if (checked) {
-        next.add(conditionId);
-      } else {
-        next.delete(conditionId);
-      }
-      return next;
-    });
-  };
-
-  const handleSave = async (): Promise<void> => {
-    setSaving(true);
+  const save = async (): Promise<void> => {
+    setSaveState('saving');
     try {
-      const updated = new Map(existing);
-      for (const problem of problems) {
+      const { problems: probs, notes: currentNotes, addressed: marked, existing: current } = stateRef.current;
+      const updated = new Map(current);
+      for (const problem of probs) {
         const conditionId = problem.id as string;
-        const isAddressed = addressed.has(conditionId);
-        const note = isAddressed ? (notes[conditionId]?.trim() ?? '') : '';
-        const current = updated.get(conditionId);
-        if (note && !current) {
+        const note = marked.has(conditionId) ? (currentNotes[conditionId]?.trim() ?? '') : '';
+        const obs = updated.get(conditionId);
+        if (note && !obs) {
           const { text, icd10 } = problemLabel(problem);
           const created = await medplum.createResource<Observation>({
             resourceType: 'Observation',
@@ -110,26 +105,75 @@ export function AssessmentCard(props: AssessmentCardProps): JSX.Element {
             valueString: note,
           });
           updated.set(conditionId, created);
-        } else if (note && current && current.valueString !== note) {
-          const saved = await medplum.updateResource<Observation>({ ...current, valueString: note });
+        } else if (note && obs && obs.valueString !== note) {
+          const saved = await medplum.updateResource<Observation>({ ...obs, valueString: note });
           updated.set(conditionId, saved);
-        } else if (!note && current?.id) {
-          // Unchecked (or emptied) problems drop their note for this visit
-          await medplum.deleteResource('Observation', current.id);
+        } else if (!note && obs?.id) {
+          await medplum.deleteResource('Observation', obs.id);
           updated.delete(conditionId);
         }
       }
       setExisting(updated);
+      setSaveState('saved');
+    } catch (err) {
+      setSaveState('error');
+      notifications.show({ color: 'red', title: 'Assessment autosave failed', message: normalizeErrorString(err) });
+    }
+  };
+
+  const debouncedSave = useDebouncedCallback(() => {
+    save().catch(console.error);
+  }, SAVE_TIMEOUT_MS);
+
+  const markDirty = (): void => {
+    setSaveState('dirty');
+    debouncedSave();
+  };
+
+  const toggleAddressed = (conditionId: string, checked: boolean): void => {
+    setAddressed((prev) => {
+      const next = new Set(prev);
+      if (checked) {
+        next.add(conditionId);
+      } else {
+        next.delete(conditionId);
+      }
+      return next;
+    });
+    markDirty();
+  };
+
+  const addDiagnosis = async (concept: CodeableConcept | undefined): Promise<void> => {
+    if (!concept?.coding?.length || !patientRef) {
+      return;
+    }
+    try {
+      const condition = await medplum.createResource<Condition>({
+        resourceType: 'Condition',
+        clinicalStatus: {
+          coding: [{ system: 'http://terminology.hl7.org/CodeSystem/condition-clinical', code: 'active' }],
+        },
+        category: [
+          {
+            coding: [
+              { system: 'http://terminology.hl7.org/CodeSystem/condition-category', code: 'problem-list-item' },
+            ],
+          },
+        ],
+        code: concept,
+        subject: { reference: patientRef },
+        encounter: { reference: `Encounter/${encounter.id}` },
+      });
+      setProblems((prev) => [condition, ...prev]);
+      setAddressed((prev) => new Set(prev).add(condition.id));
+      setPickerKey((k) => k + 1);
       notifications.show({
         color: 'green',
-        icon: <IconCircleCheck />,
-        title: 'Assessment saved',
-        message: 'Problem assessments recorded for this visit.',
+        title: 'Diagnosis added',
+        message: `${problemLabel(condition).text} added to the problem list and today's assessment.`,
       });
     } catch (err) {
       notifications.show({ color: 'red', title: 'Error', message: normalizeErrorString(err) });
-    } finally {
-      setSaving(false);
     }
   };
 
@@ -137,18 +181,35 @@ export function AssessmentCard(props: AssessmentCardProps): JSX.Element {
     <Card withBorder shadow="sm" mt="md">
       <Group justify="space-between">
         <Title order={4}>Assessment</Title>
-        {problems.length > 0 && (
-          <Text c="dimmed" size="sm">
-            {addressed.size} of {problems.length} problem{problems.length === 1 ? '' : 's'} addressed this visit
-          </Text>
-        )}
+        <Group gap="sm">
+          {enabled && <SaveBadge state={saveState} />}
+          {problems.length > 0 && (
+            <Text c="dimmed" size="sm">
+              {addressed.size} of {problems.length} problem{problems.length === 1 ? '' : 's'} addressed
+            </Text>
+          )}
+        </Group>
       </Group>
       <Text c="dimmed" size="sm">
-        Populated from the problem list — check the problems addressed today and document each individually.
+        Search a diagnosis to add it to the problem list and document under it; check off problems addressed today.
       </Text>
+
+      {enabled && (
+        <Box mt="sm" maw={520}>
+          <CodeableConceptInput
+            key={pickerKey}
+            name="add-diagnosis"
+            placeholder="Add diagnosis (ICD-10 search)..."
+            binding={CONDITION_CODE_VALUE_SET}
+            path="Condition.code"
+            onChange={(concept) => addDiagnosis(concept).catch(console.error)}
+          />
+        </Box>
+      )}
+
       {problems.length === 0 && (
         <Text c="dimmed" size="sm" mt="sm">
-          No active problems on the problem list. Add problems from the patient sidebar and they will appear here.
+          No active problems yet — search above to add the first diagnosis.
         </Text>
       )}
       <Stack gap="sm" mt="sm">
@@ -183,9 +244,13 @@ export function AssessmentCard(props: AssessmentCardProps): JSX.Element {
                 <Textarea
                   autosize
                   minRows={1}
-                  placeholder="Assessment and plan for this problem..."
+                  placeholder="Documentation for this diagnosis..."
                   value={notes[conditionId] ?? ''}
-                  onChange={(e) => setNotes((prev) => ({ ...prev, [conditionId]: e.target.value }))}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    setNotes((prev) => ({ ...prev, [conditionId]: value }));
+                    markDirty();
+                  }}
                   disabled={!enabled}
                   ml={28}
                 />
@@ -194,13 +259,6 @@ export function AssessmentCard(props: AssessmentCardProps): JSX.Element {
           );
         })}
       </Stack>
-      {problems.length > 0 && (
-        <Group mt="sm">
-          <Button size="xs" onClick={() => handleSave().catch(console.error)} loading={saving} disabled={!enabled}>
-            Save Assessment
-          </Button>
-        </Group>
-      )}
     </Card>
   );
 }
