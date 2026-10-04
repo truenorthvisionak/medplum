@@ -13,13 +13,22 @@ Image Manager/Archive + MWL SCP role.
 
 | Device | What it is | Data out | Worklist in |
 | --- | --- | --- | --- |
-| **Topcon OMNIA** | Auto kerato-refracto-**tonometer** (AR + keratometry + NCT IOP) | DICOM-capable; exports to IMAGEnet / shared folder | via IMAGEnet / DICOM (confirm MWL support on unit) |
-| **Topcon SOLOS Lite** | Automatic lensmeter (habitual Rx) | JOIA-compliant XML export | n/a (operator-driven) |
+| **Topcon OMNIA** | Auto kerato-refracto-**tonometer** (AR + keratometry + NCT IOP) | DICOM-capable; exports to IMAGEnet / shared folder; feeds RDx refraction start point | via IMAGEnet / DICOM (confirm MWL support on unit) |
+| **Topcon SOLOS** | Automatic lensmeter (habitual Rx) | JOIA-compliant XML export; feeds RDx | n/a (operator-driven) |
+| **Topcon CV-5000S** | Digital phoropter — the RDx remote-refraction instrument | Final subjective refraction via RDx/Harmony → EMR feed (confirm interface spec) | n/a (driven by RDx session) |
 | **Topcon Maestro2** | OCT + color fundus camera | DICOM (OPT/OP) via IMAGEnet 6 | DICOM MWL via IMAGEnet 6 |
 | **Topcon TERA** | Placido topography + dry eye imaging suite | images/reports; confirm DICOM vs file export with Topcon DICOM conformance docs | confirm |
-| **Topcon DC-4** | Slit lamp digital camera | DICOM (OP) via IMAGEnet 6 | via IMAGEnet 6 |
-| **Zeiss IOLMaster** (future) | Optical biometry for IOL calc | DICOM (SR + Encapsulated PDF) | DICOM MWL client (native) |
-| **IMAGEnet 6** | Topcon image management | DICOM store-and-forward + review viewer | MWL client for attached devices |
+| **Topcon DC-4** | Slit lamp digital camera | DICOM (OP) via IMAGEnet 6; stills reviewable in RDx lane | via IMAGEnet 6 |
+| **Alcon Argos** or **Zeiss IOLMaster** | SS-OCT optical biometry for IOL calc | DICOM / PDF reports (Argos: confirm DICOM licensing; lives partly in Alcon's surgical-planning ecosystem) | DICOM MWL client (confirm on Argos) |
+| **iCare EIDON** | TrueColor confocal widefield fundus imager (non-Topcon) | DICOM (optional module — confirm it is quoted) direct to Orthanc | DICOM MWL direct from Orthanc (confirm module) |
+| **Ellex/Lumibird Tango Neo** | Combined SLT + YAG laser | None — treatment device, no data interface; procedure documented in the EHR (future: SLT/YAG procedure note template with laser settings) | n/a |
+| **IMAGEnet 6** | Topcon image management | DICOM store-and-forward + review viewer | MWL client for attached Topcon devices |
+| **RDx (+ Harmony)** | Topcon cloud tele-refraction + exam-lane workflow | Refraction results → EMR via Harmony integration (interface TBC: HL7 vs API) | pulls demographics/history from EHR via Harmony (TBC) |
+
+Non-Topcon devices (EIDON, Argos/IOLMaster) talk DICOM **directly to Orthanc**
+— this is exactly why the archive/worklist hub is vendor-neutral Orthanc
+rather than IMAGEnet or Harmony. Medplum remains the system of record;
+Topcon's cloud layers are spokes, never the hub.
 
 ## Topology
 
